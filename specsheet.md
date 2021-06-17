@@ -4,3 +4,5 @@
 
 16 bit data bus
 
+16 instructions
+
