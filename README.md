@@ -1,2 +1,2 @@
-# MiniPU
-Soft CPU design for all your processing needs.
+# The JBAT1
+Virual CPU design for all your processing needs.
