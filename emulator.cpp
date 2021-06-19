@@ -44,16 +44,23 @@ struct Registers {
     unsigned char S1 = 0;
     /*
         Flags in S0 (MSB to LSB)
-        -
-        -	
+        1   Hardwired 1
+        0	Hardwired 0
         -	
         H	Halt
         -	
-        N	Negative
+        N	Negative *not implemented
         Z	Zero
         C	Carry
 
         Flags in S1 (MSB to LSB)
+        -
+        -
+        -
+        -
+        -
+        -
+        -
         -
 
     */
@@ -228,7 +235,7 @@ class Emulator {
                 printf("Opcode: %s\n", getHex(opcode).c_str());
                 unsigned char* types;
                 unsigned char src_r, src1_r, src2_r, tar_r;
-                bool big;
+                bool big, flip;
                 int result;
                 Operand src, src1, src2, tar;
                 switch (opcode){
@@ -236,14 +243,18 @@ class Emulator {
                         get_types(1, types);
                         tar_r = types[0];
                         tar = get_aop(tar_r);
-                        store(tar, tar.value + 1);
+                        result = tar.value + 1;
+                        store(tar, result);
+                        setFlag("S0", 1, result == 0); // zero flag
                         break;
                     case 0x01: // dec <tar>(8R, 16R, Mx)
-                        break;
                         get_types(1, types);
                         tar_r = types[0];
                         tar = get_aop(tar_r);
-                        store(tar, tar.value - 1);
+                        result = tar.value - 1;
+                        store(tar, result);
+                        setFlag("S0", 1, result == 0); // zero flag
+                        break;
                     case 0x02: // add <src>(CV, 8R, Mx) <tar>(8R, Mx)
                         get_types(2, types);
                         src_r = types[0], tar_r = types[1];
@@ -253,6 +264,7 @@ class Emulator {
                         result = src.value + tar.value;
                         store(tar, result);
                         setFlag("S0", 0, result > 0xFF);
+                        setFlag("S0", 1, result == 0); // zero flag
                         break;
                     case 0x03: // addc <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
                         get_types(2, types);
@@ -263,6 +275,7 @@ class Emulator {
                         result = src.value + tar.value + getFlag("S0", 0);
                         store(tar, result);
                         setFlag("S0", 0, result > 0xFF);
+                        setFlag("S0", 1, result == 0); // zero flag
                         break;
                     case 0x04: // sub <src>(CV, 8R, Mx) <tar>(8R, Mx)
                         get_types(2, types);
@@ -273,6 +286,7 @@ class Emulator {
                         result = tar.value - src.value;
                         store(tar, result);
                         setFlag("S0", 0, src.value > tar.value);
+                        setFlag("S0", 1, result == 0); // zero flag
                         break;
                     case 0x05: // subb <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
                         get_types(2, types);
@@ -283,9 +297,9 @@ class Emulator {
                         result = tar.value - (src.value + getFlag("S0", 0));
                         store(tar, result);
                         setFlag("S0", 0, (src.value + getFlag("S0", 0)) > tar.value);
+                        setFlag("S0", 1, result == 0); // zero flag
                         break;
-
-                    
+                    // TODO: implement bit shifting instructions and other logic ops
                     case 0x0B: // or <src>(CV, 8R, Mx) <tar>(8R, Mx)
                         get_types(2, types);
                         src_r = types[0], tar_r = types[1];
@@ -294,7 +308,23 @@ class Emulator {
                         tar = get_aop(tar_r);
                         result = src.value | tar.value;
                         store(tar, result);
+                        setFlag("S0", 1, result == 0); // zero flag
                         break;
+                    case 0x10: // jmp <src>(CV) <tar>(Mx) <src-aop> <tar-aop>
+                        get_types(2, types);
+                        src_r = types[0], tar_r = types[1];
+                        src = get_aop(src_r);
+                        tar = get_aop(tar_r);
+                        //printf("src: %x target: %d\n", src.value, tar.target);
+                        flip = BIT_CHECK(src.value, 7);
+                        BIT_SET(src.value, 7, 0);
+                        bool flagSet;
+                        if (src.value <= 7) flagSet = getFlag("S0", src.value);
+                        else getFlag("S1", src.value);
+                        flagSet ^= flip;
+                        if (flagSet) state.registers.PC = tar.target;
+                        break;
+
                     default:
                         printf("Unexpected opcode %#x, PC: %d", opcode, state.registers.PC);
                         exit(1);
@@ -313,10 +343,13 @@ class Emulator {
 
 int main(){
     unsigned char memory[0x100] = {
-    //  inc    MD   $FF   $00
-        0x00, 0x10, 0xFF, 0x00,
-    //  add    CV    R0    5
-        0x02, 0x0F, 0x00, 0x05,
+    //  add    CV    R0    10                    ; add 10 to R0
+        0x02, 0x0F, 0x00, 0x0C,
+    //  dec    R0
+        0x01, 0x00,
+    //  jmp    CV    MD  %0b10000001  0x0004     ; jump to address 0x0004 if not zero
+    //                                           ; branching if flag bit 1 is *not* set
+        0x10, 0x0F, 0x10, 0b10000001, 0x04, 0x00,
     //  or     CV    S0    %00010000
         0x0B, 0x0F, 0x08, 0b00010000 // set halt bit
     };
