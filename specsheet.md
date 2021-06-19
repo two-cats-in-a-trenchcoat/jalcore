@@ -1,6 +1,9 @@
-== BASIC DESIGN LAYOUT ==
+# Basic Design
+- 8 bit microprocessor
+- 16 bit data bus (?)
 
-8 bit microprocessor
+# Registers
+See `registers.csv` for details.
 
-16 bit data bus
-
+# Instruction Set
+See `instructions.csv` for details.
