@@ -1,19 +1,20 @@
 "Mnemonic","Identifier","Size","Description","Extra"
-"R0","$00","8-bit","General Purpose Register 0",""
-"R1","$01","8-bit","General Purpose Register 1",""
-"R2","$02","8-bit","General Purpose Register 2",""
-"R3","$03","8-bit","General Purpose Register 3",""
-"R4","$04","8-bit","General Purpose Register 4",""
-"R5","$05","8-bit","General Purpose Register 5",""
-"R6","$06","8-bit","General Purpose Register 6",""
-"R7","$07","8-bit","General Purpose Register 7",""
-"S0","$08","8-bit","Status Flags Register 0",""
-"S1","$09","","",""
-"PC","$0A","16-bit","Program Counter",""
-"SP","$0B","16-bit","Stack Pointer",""
-"IX","$0C","16-bit","Index Register",""
-"-","$0D","","",""
-"-","$0E","","",""
-"CV","$0F","","Constant Value","Virtual"
-"MD","$10","","Memory Direct","Virtual"
-"MX","$11","","Memory Indexed","Virtual"
+"R0","$00","8-bit","General Purpose Register 0",
+"R1","$01","8-bit","General Purpose Register 1",
+"R2","$02","8-bit","General Purpose Register 2",
+"R3","$03","8-bit","General Purpose Register 3",
+"R4","$04","8-bit","General Purpose Register 4",
+"R5","$05","8-bit","General Purpose Register 5",
+"R6","$06","8-bit","General Purpose Register 6",
+"R7","$07","8-bit","General Purpose Register 7",
+"S0","$08","8-bit","Status Flags Register 0",
+"S1","$09",,,
+"PC","$0A","16-bit","Program Counter",
+"SP","$0B","16-bit","Stack Pointer",
+"IX","$0C","16-bit","Index Register",
+"-","$0D",,,
+"-","$0E",,,
+"CV8","$0F",,"Constant Value (8 bit)","Virtual"
+"CV16","$10",,"Constant Value (16 bit)","Virtual"
+"MD","$11",,"Memory Direct","Virtual"
+"MX","$12",,"Memory Indexed","Virtual"

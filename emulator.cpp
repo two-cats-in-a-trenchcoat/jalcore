@@ -71,9 +71,10 @@ struct Registers {
 };
 
 const unsigned char PC = 0x0A;
-const unsigned char CV = 0x0F;
-const unsigned char MD = 0x10;
-const unsigned char MX = 0x11;
+const unsigned char CV8 = 0x0F;
+const unsigned char CV16 = 0x10;
+const unsigned char MD = 0x11;
+const unsigned char MX = 0x12;
 
 struct State {
     Registers registers;
@@ -149,6 +150,8 @@ class Emulator {
                 case 0x0C: // IX
                     return state.registers.IX;
             }
+            printf("Invalid type %d\n", type);
+            return 0;
         }
 
         void setRegister(unsigned char type, int value){
@@ -197,17 +200,26 @@ class Emulator {
             }
         }
 
-        Operand get_aop(unsigned char type, bool big=false){
+        Operand get_aop(unsigned char type){
             if (type == MD || type == MX){ // Memory Index
                 int addr = offset_address(type, read_number(2));
                 int value = state.memory[addr];
                 return Operand {value, addr, "Mx"};
             }
-            else if (type == CV){ // Constant Value
-                if (big) return Operand {read_number(2), 0, "CV"};
-                return Operand {read_byte(), 0, "CV"};
-            }
+            else if (type == CV8) return Operand {read_byte(), 0, "CV"}; // 8 bit Constant
+            else if (type == CV16) return Operand {read_number(2), 0, "CV"}; // 16 bit Constant
+            
             return Operand {loadRegister(type), type, "REG"};
+        }
+
+        void get_params(int amount, Operand *result){
+            unsigned char types[amount];
+            get_types(amount, types);
+            for (int i = 0; i < amount; i++){
+                //printf("%d\n", i);
+                Operand p = get_aop(types[i]);
+                result[i] = p;
+            }
         }
 
         void store(Operand operand, int value){
@@ -229,102 +241,121 @@ class Emulator {
             if (target == "S1") BIT_SET(state.registers.S1, bit, value);
         }
 
+        // Instruction definitions
+
+        void op_inc(){
+            // inc <tar>(8R, 16R, Mx)
+            Operand params[1];
+            get_params(1, params);
+            Operand tar = params[0];
+            int result = tar.value - 1;
+            store(tar, result);
+            setFlag("S0", 1, result == 0); // zero flag
+        }
+
+        void op_dec(){
+            // dec <tar>(8R, 16R, Mx)
+            Operand params[1];
+            get_params(1, params);
+            Operand tar = params[0];
+            int result = tar.value - 1;
+            store(tar, result);
+            setFlag("S0", 1, result == 0); // zero flag
+        }
+
+        void op_add(){
+            // add <src>(CV, 8R, Mx) <tar>(8R, Mx)
+            Operand params[2];
+            get_params(2, params);
+            Operand src = params[0];
+            Operand tar = params[1];
+            int result = src.value + tar.value;
+            store(tar, result);
+            setFlag("S0", 0, result > 0xFF);
+            setFlag("S0", 1, result == 0); // zero flag
+        }
+
+        void op_addc(){
+            // addc <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
+            Operand params[2];
+            get_params(2, params);
+            Operand src = params[0];
+            Operand tar = params[1];
+            int result = src.value + tar.value + getFlag("S0", 0);
+            store(tar, result);
+            setFlag("S0", 0, result > 0xFF);
+            setFlag("S0", 1, result == 0); // zero flag
+        }
+
+        void op_sub(){
+            // sub <src>(CV, 8R, Mx) <tar>(8R, Mx)
+            Operand params[2];
+            get_params(2, params);
+            Operand src = params[0];
+            Operand tar = params[1];
+            int result = tar.value - src.value;
+            store(tar, result);
+            setFlag("S0", 0, src.value > tar.value);
+            setFlag("S0", 1, result == 0); // zero flag
+        }
+
+        void op_subb(){
+            // subb <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
+            Operand params[2];
+            get_params(2, params);
+            Operand src = params[0];
+            Operand tar = params[1];
+            int result = tar.value - (src.value + getFlag("S0", 0));
+            store(tar, result);
+            setFlag("S0", 0, (src.value + getFlag("S0", 0)) > tar.value);
+            setFlag("S0", 1, result == 0); // zero flag
+        }
+
+        void op_or(){
+            // or <src>(CV, 8R, Mx) <tar>(8R, Mx)
+            Operand params[2];
+            get_params(2, params);
+            Operand src = params[0];
+            Operand tar = params[1];
+            int result = src.value | tar.value;
+            store(tar, result);
+            setFlag("S0", 1, result == 0); // zero flag
+        }
+
+        void op_jmp(){
+            // jmp <src>(CV) <tar>(Mx) <src-aop> <tar-aop>
+            Operand params[2];
+            get_params(2, params);
+            Operand src = params[0];
+            Operand tar = params[1];
+            //printf("src: %x target: %d\n", src.value, tar.target);
+            bool flip = BIT_CHECK(src.value, 7);
+            BIT_SET(src.value, 7, 0);
+            bool flagSet;
+            if (src.value <= 7) flagSet = getFlag("S0", src.value);
+            else getFlag("S1", src.value);
+            flagSet ^= flip;
+            if (flagSet) state.registers.PC = tar.target;
+        }
+
+
+
+        // Execution loop
+
         void execute(){
             while (1){
                 unsigned char opcode = read_byte();
                 printf("Opcode: %s\n", getHex(opcode).c_str());
-                unsigned char* types;
-                unsigned char src_r, src1_r, src2_r, tar_r;
-                bool big, flip;
-                int result;
-                Operand src, src1, src2, tar;
                 switch (opcode){
-                    case 0x00: // inc <tar>(8R, 16R, Mx)
-                        get_types(1, types);
-                        tar_r = types[0];
-                        tar = get_aop(tar_r);
-                        result = tar.value + 1;
-                        store(tar, result);
-                        setFlag("S0", 1, result == 0); // zero flag
-                        break;
-                    case 0x01: // dec <tar>(8R, 16R, Mx)
-                        get_types(1, types);
-                        tar_r = types[0];
-                        tar = get_aop(tar_r);
-                        result = tar.value - 1;
-                        store(tar, result);
-                        setFlag("S0", 1, result == 0); // zero flag
-                        break;
-                    case 0x02: // add <src>(CV, 8R, Mx) <tar>(8R, Mx)
-                        get_types(2, types);
-                        src_r = types[0], tar_r = types[1];
-                        big = is_2byte_register(tar_r);
-                        src = get_aop(src_r, big);
-                        tar = get_aop(tar_r);
-                        result = src.value + tar.value;
-                        store(tar, result);
-                        setFlag("S0", 0, result > 0xFF);
-                        setFlag("S0", 1, result == 0); // zero flag
-                        break;
-                    case 0x03: // addc <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
-                        get_types(2, types);
-                        src_r = types[0], tar_r = types[1];
-                        big = is_2byte_register(tar_r);
-                        src = get_aop(src_r, big);
-                        tar = get_aop(tar_r);
-                        result = src.value + tar.value + getFlag("S0", 0);
-                        store(tar, result);
-                        setFlag("S0", 0, result > 0xFF);
-                        setFlag("S0", 1, result == 0); // zero flag
-                        break;
-                    case 0x04: // sub <src>(CV, 8R, Mx) <tar>(8R, Mx)
-                        get_types(2, types);
-                        src_r = types[0], tar_r = types[1];
-                        big = is_2byte_register(tar_r);
-                        src = get_aop(src_r, big);
-                        tar = get_aop(tar_r);
-                        result = tar.value - src.value;
-                        store(tar, result);
-                        setFlag("S0", 0, src.value > tar.value);
-                        setFlag("S0", 1, result == 0); // zero flag
-                        break;
-                    case 0x05: // subb <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
-                        get_types(2, types);
-                        src_r = types[0], tar_r = types[1];
-                        big = is_2byte_register(tar_r);
-                        src = get_aop(src_r, big);
-                        tar = get_aop(tar_r);
-                        result = tar.value - (src.value + getFlag("S0", 0));
-                        store(tar, result);
-                        setFlag("S0", 0, (src.value + getFlag("S0", 0)) > tar.value);
-                        setFlag("S0", 1, result == 0); // zero flag
-                        break;
+                    case 0x00: op_inc(); break;
+                    case 0x01: op_dec(); break;
+                    case 0x02: op_add(); break;
+                    case 0x03: op_addc(); break;
+                    case 0x04: op_sub(); break;
+                    case 0x05: op_subb(); break;
                     // TODO: implement bit shifting instructions and other logic ops
-                    case 0x0B: // or <src>(CV, 8R, Mx) <tar>(8R, Mx)
-                        get_types(2, types);
-                        src_r = types[0], tar_r = types[1];
-                        big = is_2byte_register(tar_r);
-                        src = get_aop(src_r, big);
-                        tar = get_aop(tar_r);
-                        result = src.value | tar.value;
-                        store(tar, result);
-                        setFlag("S0", 1, result == 0); // zero flag
-                        break;
-                    case 0x10: // jmp <src>(CV) <tar>(Mx) <src-aop> <tar-aop>
-                        get_types(2, types);
-                        src_r = types[0], tar_r = types[1];
-                        src = get_aop(src_r);
-                        tar = get_aop(tar_r);
-                        //printf("src: %x target: %d\n", src.value, tar.target);
-                        flip = BIT_CHECK(src.value, 7);
-                        BIT_SET(src.value, 7, 0);
-                        bool flagSet;
-                        if (src.value <= 7) flagSet = getFlag("S0", src.value);
-                        else getFlag("S1", src.value);
-                        flagSet ^= flip;
-                        if (flagSet) state.registers.PC = tar.target;
-                        break;
-
+                    case 0x0B: op_or(); break;
+                    case 0x10: op_jmp(); break;
                     default:
                         printf("Unexpected opcode %#x, PC: %d", opcode, state.registers.PC);
                         exit(1);
@@ -343,14 +374,14 @@ class Emulator {
 
 int main(){
     unsigned char memory[0x100] = {
-    //  add    CV    R0    10                    ; add 10 to R0
+    //  add    CV8   R0    10                    ; add 10 to R0
         0x02, 0x0F, 0x00, 0x0C,
     //  dec    R0
         0x01, 0x00,
-    //  jmp    CV    MD  %0b10000001  0x0004     ; jump to address 0x0004 if not zero
+    //  jmp   CV8    MD  %0b10000001  0x0004     ; jump to address 0x0004 if not zero
     //                                           ; branching if flag bit 1 is *not* set
-        0x10, 0x0F, 0x10, 0b10000001, 0x04, 0x00,
-    //  or     CV    S0    %00010000
+        0x10, 0x0F, 0x11, 0b10000001, 0x04, 0x00,
+    //  or     CV8   S0    %00010000
         0x0B, 0x0F, 0x08, 0b00010000 // set halt bit
     };
     State state {Registers {}, memory, 0x100};
