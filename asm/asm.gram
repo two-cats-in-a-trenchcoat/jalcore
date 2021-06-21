@@ -1,0 +1,14 @@
+program  : p=instruction* { p };
+
+instruction
+    :  i=ID COLON { "jmp_point", i.value };
+    :  opcode=INSTRUCTION params=params { (opcode.value, params) };
+
+params  :  first=factor rest=(COMMA factor)* { process_params(first, rest) };
+
+factor
+    :  LPAREN i=item RPAREN { ("addr", i[1]) };
+    :  i=ID { ("reg" if i.value in REGISTERS else "jmp_pointer", i.value) };
+    :  i=item { i };
+
+item  :  i= INT | HEX | BIN { ("cv", i.value) };
