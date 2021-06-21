@@ -16,9 +16,9 @@ std::string getHex(char c){
     return r;
 }
 
-std::string dumpMem(unsigned char *memory, int size){
+std::string dumpMem(unsigned char *memory, unsigned size){
     std::string r = "";
-    for (int i = 0; i < size; i++){
+    for (unsigned i = 0; i < size; i++){
         const char ch = memory[i];
         r += getHex(ch);
     }
@@ -26,8 +26,8 @@ std::string dumpMem(unsigned char *memory, int size){
 }
 
 struct Operand {
-    int value;
-    int target;
+    unsigned value;
+    unsigned target;
     std::string type;
 };
 
@@ -79,7 +79,7 @@ const unsigned char MX = 0x12;
 struct State {
     Registers registers;
     unsigned char *memory;
-    int size;
+    unsigned size;
 };
 
 class Emulator {
@@ -96,15 +96,15 @@ class Emulator {
             return byte;
         }
 
-        int offset_address(unsigned char type, int address){
+        unsigned offset_address(unsigned char type, unsigned address){
             if (type == MX) return state.registers.IX + address;
             return address;
         }
 
-        int read_number(int numBytes){
+        unsigned read_number(unsigned numBytes){
             unsigned char b1 = read_byte();
             unsigned char b2 = read_byte();
-            int result = (b2 << 4) + (b1);
+            unsigned result = (b2 << 4) + (b1);
             //printf("%s %s -> %d\n", getHex(b1).c_str(), getHex(b2).c_str(), result);
             return result;
         }
@@ -113,13 +113,13 @@ class Emulator {
             return type >= 0x0A && type <= 0x0E;
         }
 
-        void get_types(int amount, unsigned char* result){
-            for (int i = 0; i < amount; i++){
+        void get_types(unsigned amount, unsigned char* result){
+            for (unsigned i = 0; i < amount; i++){
                 result[i] = read_byte();
             }
         }
 
-        int loadRegister(unsigned char type){
+        unsigned loadRegister(unsigned char type){
             switch (type){
                 case 0x00: // R0
                     return state.registers.R0;
@@ -154,7 +154,7 @@ class Emulator {
             return 0;
         }
 
-        void setRegister(unsigned char type, int value){
+        void setRegister(unsigned char type, unsigned value){
             switch (type){
                 case 0x00: // R0
                     state.registers.R0 = value;
@@ -183,6 +183,8 @@ class Emulator {
                 
                 case 0x08: // S0
                     state.registers.S0 = value;
+                    BIT_SET(state.registers.S0, 7, 1); // hardwired 1
+                    BIT_SET(state.registers.S0, 6, 0); // hardwired 0
                     break;
                 case 0x09: // S1
                     state.registers.S1 = value;
@@ -202,27 +204,27 @@ class Emulator {
 
         Operand get_aop(unsigned char type){
             if (type == MD || type == MX){ // Memory Index
-                int addr = offset_address(type, read_number(2));
-                int value = state.memory[addr];
+                unsigned addr = offset_address(type, read_number(2));
+                unsigned value = state.memory[addr];
                 return Operand {value, addr, "Mx"};
             }
-            else if (type == CV8) return Operand {read_byte(), 0, "CV"}; // 8 bit Constant
-            else if (type == CV16) return Operand {read_number(2), 0, "CV"}; // 16 bit Constant
+            else if (type == CV8) return Operand {read_byte(), 0, "CV8"}; // 8 bit Constant
+            else if (type == CV16) return Operand {read_number(2), 0, "CV16"}; // 16 bit Constant
             
             return Operand {loadRegister(type), type, "REG"};
         }
 
-        void get_params(int amount, Operand *result){
+        void get_params(unsigned amount, Operand *result){
             unsigned char types[amount];
             get_types(amount, types);
-            for (int i = 0; i < amount; i++){
+            for (unsigned i = 0; i < amount; i++){
                 //printf("%d\n", i);
                 Operand p = get_aop(types[i]);
                 result[i] = p;
             }
         }
 
-        void store(Operand operand, int value){
+        void store(Operand operand, unsigned value){
             if (operand.type == "Mx"){
                 state.memory[operand.target] = value;
             }
@@ -231,12 +233,12 @@ class Emulator {
             }
         }
 
-        bool getFlag(std::string target, unsigned int bit){
+        bool getFlag(std::string target, unsigned bit){
             if (target == "S0") return BIT_CHECK(state.registers.S0, bit);
             if (target == "S1") return BIT_CHECK(state.registers.S1, bit);
         }
 
-        void setFlag(std::string target, unsigned int bit, bool value){
+        void setFlag(std::string target, unsigned bit, bool value){
             if (target == "S0") BIT_SET(state.registers.S0, bit, value);
             if (target == "S1") BIT_SET(state.registers.S1, bit, value);
         }
@@ -248,7 +250,7 @@ class Emulator {
             Operand params[1];
             get_params(1, params);
             Operand tar = params[0];
-            int result = tar.value - 1;
+            unsigned result = tar.value - 1;
             store(tar, result);
             setFlag("S0", 1, result == 0); // zero flag
         }
@@ -258,7 +260,7 @@ class Emulator {
             Operand params[1];
             get_params(1, params);
             Operand tar = params[0];
-            int result = tar.value - 1;
+            unsigned result = tar.value - 1;
             store(tar, result);
             setFlag("S0", 1, result == 0); // zero flag
         }
@@ -269,7 +271,7 @@ class Emulator {
             get_params(2, params);
             Operand src = params[0];
             Operand tar = params[1];
-            int result = src.value + tar.value;
+            unsigned result = src.value + tar.value;
             store(tar, result);
             setFlag("S0", 0, result > 0xFF);
             setFlag("S0", 1, result == 0); // zero flag
@@ -281,7 +283,7 @@ class Emulator {
             get_params(2, params);
             Operand src = params[0];
             Operand tar = params[1];
-            int result = src.value + tar.value + getFlag("S0", 0);
+            unsigned result = src.value + tar.value + getFlag("S0", 0);
             store(tar, result);
             setFlag("S0", 0, result > 0xFF);
             setFlag("S0", 1, result == 0); // zero flag
@@ -293,7 +295,7 @@ class Emulator {
             get_params(2, params);
             Operand src = params[0];
             Operand tar = params[1];
-            int result = tar.value - src.value;
+            unsigned result = tar.value - src.value;
             store(tar, result);
             setFlag("S0", 0, src.value > tar.value);
             setFlag("S0", 1, result == 0); // zero flag
@@ -305,9 +307,110 @@ class Emulator {
             get_params(2, params);
             Operand src = params[0];
             Operand tar = params[1];
-            int result = tar.value - (src.value + getFlag("S0", 0));
+            unsigned result = tar.value - (src.value + getFlag("S0", 0));
             store(tar, result);
             setFlag("S0", 0, (src.value + getFlag("S0", 0)) > tar.value);
+            setFlag("S0", 1, result == 0); // zero flag
+        }
+
+        void op_rol(){
+            // rol <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
+            // (rotate left)
+            Operand params[2];
+            get_params(2, params);
+            Operand src = params[0];
+            Operand tar = params[1];
+            unsigned result = src.value;
+            bool carry;
+            if (src.type == "CV8"){
+                carry = result >> 7;
+                result  = (result << 1) | carry;
+            }
+            else {
+                carry = result >> 15;
+                result  = (result << 1) | carry;
+            }
+            store(tar, result);
+            setFlag("S0", 1, result == 0); // zero flag
+            setFlag("S0", 0, carry); // carry bit
+        }
+
+        void op_rolc(){
+            // rolc <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
+            // (rotate left through carry)
+            Operand params[2];
+            get_params(2, params);
+            Operand src = params[0];
+            Operand tar = params[1];
+            unsigned result = src.value;
+            bool oldcarry = getFlag("S0", 1);
+            bool carry;
+            if (src.type == "CV8"){
+                carry = result >> 7;
+                result  = (result << 1) | oldcarry;
+            }
+            else {
+                carry = result >> 15;
+                result  = (result << 1) | oldcarry;
+            }
+            store(tar, result);
+            setFlag("S0", 1, result == 0); // zero flag
+            setFlag("S0", 0, carry); // carry bit
+        }
+
+        void op_ror(){
+            // ror <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
+            // (rotate right)
+            Operand params[2];
+            get_params(2, params);
+            Operand src = params[0];
+            Operand tar = params[1];
+            unsigned result = src.value;
+            bool carry;
+            if (src.type == "CV8"){
+                carry = result & 1;
+                result  = (result >> 1) | (carry << 7);
+            }
+            else {
+                carry = result & 1;
+                result  = (result >> 1) | (carry << 15);
+            }
+            store(tar, result);
+            setFlag("S0", 1, result == 0); // zero flag
+            setFlag("S0", 0, carry); // carry bit
+        }
+
+        void op_rorc(){
+            // rorc <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
+            // (rotate right through carry)
+            Operand params[2];
+            get_params(2, params);
+            Operand src = params[0];
+            Operand tar = params[1];
+            unsigned result = src.value;
+            bool oldcarry = getFlag("S0", 1);
+            bool carry;
+            if (src.type == "CV8"){
+                carry = result & 1;
+                result  = (result << 1) | (oldcarry << 7);
+            }
+            else {
+                carry = result & 1;
+                result  = (result << 1) | (oldcarry << 15);
+            }
+            store(tar, result);
+            setFlag("S0", 1, result == 0); // zero flag
+            setFlag("S0", 0, carry); // carry bit
+        }
+
+        void op_and(){
+            // and <src>(CV, 8R, Mx) <tar>(8R, Mx)
+            Operand params[2];
+            get_params(2, params);
+            Operand src = params[0];
+            Operand tar = params[1];
+            unsigned result = src.value & tar.value;
+            store(tar, result);
             setFlag("S0", 1, result == 0); // zero flag
         }
 
@@ -317,9 +420,59 @@ class Emulator {
             get_params(2, params);
             Operand src = params[0];
             Operand tar = params[1];
-            int result = src.value | tar.value;
+            unsigned result = src.value | tar.value;
             store(tar, result);
             setFlag("S0", 1, result == 0); // zero flag
+        }
+
+        void op_xor(){
+            // xor <src>(CV, 8R, Mx) <tar>(8R, Mx)
+            Operand params[2];
+            get_params(2, params);
+            Operand src = params[0];
+            Operand tar = params[1];
+            unsigned result = src.value ^ tar.value;
+            store(tar, result);
+            setFlag("S0", 1, result == 0); // zero flag
+        }
+
+        void op_cmp(){
+            // cmp <src1>(CV, 8R, 16R, Mx) <src2>(CV, 8R, 16R, Mx) <src1-aop> <src2-aop>
+            Operand params[2];
+            get_params(2, params);
+            Operand src1 = params[0];
+            Operand src2 = params[1];
+            setFlag("S0", 0, src1.value > src2.value); // carry flag
+            setFlag("S0", 1, src1.value == src2.value); // zero flag
+        }
+
+        void op_push(){
+            // push <src>(CV, 8R, 16R, Mx)
+            Operand params[1];
+            get_params(1, params);
+            Operand src = params[0];
+            store(Operand { 0, state.registers.SP + 1U, "Mx" }, src.value);
+            state.registers.SP++;
+            if (src.type == "CV16" || is_2byte_register(src.target)){
+                store(Operand { 0, state.registers.SP + 2U, "Mx" }, src.value >> 8);
+                state.registers.SP++;
+            }
+        }
+
+        void op_pop(){
+            // pop <tar>(8R, 16R, Mx)
+            Operand params[1];
+            get_params(1, params);
+            Operand tar = params[0];
+            unsigned result;
+            result += state.memory[state.registers.SP];
+            state.registers.SP--;
+            if (is_2byte_register(tar.target)){
+                result << 8;
+                result += state.memory[state.registers.SP];
+                state.registers.SP--;
+            }
+            store(tar, result);
         }
 
         void op_jmp(){
@@ -338,6 +491,15 @@ class Emulator {
             if (flagSet) state.registers.PC = tar.target;
         }
 
+        void op_mov(){
+            // mov <src>(CV, 8R, 16R, Mx) <tar>(8R, 16R, Mx) <src-aop> <tar-aop>
+            Operand params[2];
+            get_params(2, params);
+            Operand src = params[0];
+            Operand tar = params[1];
+            store(tar, src.value);
+        }
+
 
 
         // Execution loop
@@ -353,9 +515,21 @@ class Emulator {
                     case 0x03: op_addc(); break;
                     case 0x04: op_sub(); break;
                     case 0x05: op_subb(); break;
-                    // TODO: implement bit shifting instructions and other logic ops
+                    case 0x06: op_rol(); break;
+                    case 0x07: op_rolc(); break;
+                    case 0x08: op_ror(); break;
+                    case 0x09: op_rorc(); break;
+                    case 0x0A: op_and(); break;
                     case 0x0B: op_or(); break;
+                    case 0x0C: op_xor(); break;
+                    case 0x0D: op_cmp(); break;
+                    case 0x0E: op_push(); break;
+                    case 0x0F: op_pop(); break;
                     case 0x10: op_jmp(); break;
+                    //case 0x11: op_jsr(); break;
+                    case 0x12: break; // nop
+                    case 0x13: op_mov(); break;
+                    // TODO: implement bit shifting instructions and other logic ops
                     default:
                         printf("Unexpected opcode %#x, PC: %d", opcode, state.registers.PC);
                         exit(1);
@@ -364,7 +538,7 @@ class Emulator {
                 // halt check
                 if (getFlag("S0", 4)){
                     printf("Halted\n");
-                    //print(memory.hex())
+                    //printf(memory.hex())
                     break;
                 }
             }
@@ -374,8 +548,8 @@ class Emulator {
 
 int main(){
     unsigned char memory[0x100] = {
-    //  add    CV8   R0    10                    ; add 10 to R0
-        0x02, 0x0F, 0x00, 0x0C,
+    //  mov    CV8   R0    10                    ; move 10 to R0
+        0x13, 0x0F, 0x00, 0x0A,
     //  dec    R0
         0x01, 0x00,
     //  jmp   CV8    MD  %0b10000001  0x0004     ; jump to address 0x0004 if not zero
