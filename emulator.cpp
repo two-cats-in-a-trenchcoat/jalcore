@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string>
 #include <iostream>
+#include <fstream>
 
 // Set nth bit of target to value
 #define BIT_SET(target, n, value) (target = (target & ~(1ULL << n)) | (value << n))
@@ -546,21 +547,33 @@ class Emulator {
 };
 
 
-int main(){
-    unsigned char memory[0x100] = {
-    //  mov    CV8   R0    10                    ; move 10 to R0
-        0x13, 0x0F, 0x00, 0x0A,
-    //  dec    R0
-        0x01, 0x00,
-    //  jmp   CV8    MD  %0b10000001  0x0004     ; jump to address 0x0004 if not zero
-    //                                           ; branching if flag bit 1 is *not* set
-        0x10, 0x0F, 0x11, 0b10000001, 0x04, 0x00,
-    //  or     CV8   S0    %00010000
-        0x0B, 0x0F, 0x08, 0b00010000 // set halt bit
-    };
-    State state {Registers {}, memory, 0x100};
+int main(int argc, char* argv[]){
+    unsigned char memory[0xFFFF] = {};
+    if (argc >= 2){
+        FILE* file = fopen(argv[1], "r+");
+        if (file == NULL) {
+            printf("File is null");
+            return 1;
+        }
+        fseek(file, 0, SEEK_END);
+        long int size = ftell(file);
+        fseek(file, 0, SEEK_SET);
+        if (size > sizeof(memory))
+        {
+            size = sizeof(memory);
+        }
+        fread(memory, sizeof(unsigned char), size, file);
+        fclose(file);
+    }
+    State state {Registers {}, memory, 0xFFFF};
     Emulator emu {state};
     emu.execute();
-    std::cout << dumpMem(state.memory, state.size) << "\n";
+    // dump to core.bin
+    FILE* file = fopen("core.bin", "w+");
+    if (file != NULL){
+        fwrite(state.memory, sizeof(unsigned char), emu.state.size, file);
+        fclose(file);
+        printf("Memory dumped to 'core.bin'\n");
+    }
     return 0;
 }

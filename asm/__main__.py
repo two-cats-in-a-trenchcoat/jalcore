@@ -90,6 +90,7 @@ def main():
     import argparse
     parser = argparse.ArgumentParser("asm", description="assembler")
     parser.add_argument("inputfile", type=argparse.FileType("r", encoding="utf-8"), nargs="?")
+    parser.add_argument("-o", type=str, metavar="outputfile")
 
     options = parser.parse_args()
     data = options.inputfile.read()
@@ -106,6 +107,8 @@ def main():
     else:
         print(result)
         result = assemble(result)
+        with open(options.o, "wb") as f:
+            f.write(result)
         print(", ".join(hex(v) for v in result))
 
 if __name__ == "__main__":
