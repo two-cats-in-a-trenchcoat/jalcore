@@ -25,6 +25,7 @@ REGISTERS = [
     "md",
     "mx",
     "mv",
+    "rf",
 ]
 
 INSTRUCTIONS = [

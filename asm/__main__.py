@@ -83,10 +83,10 @@ def assemble(instructions: list):
             jmp_points[params] = len(result)
             continue
         o = get_opcode(opcode)
-        #print(hex(o), end=" ")
+        #print(opcode, end=" ")
         result.append(o)
         for param_type, value in params: # add identifiers
-            #print(t, end=" ")
+            #print(f"{param_type} - {s}", end=" ")
             result.append(get_identifier(param_type, value))
         #print()
         for param_type, value in params: # push values

@@ -19,3 +19,4 @@
 "MD","$11",,"Memory Direct","Virtual"
 "MX","$12",,"Memory Indexed","Virtual"
 "MV","$13",,"Memory Address at value","Virtual"
+"RF","$14","16-bit","Display Refresh Frequency","Default 1024"

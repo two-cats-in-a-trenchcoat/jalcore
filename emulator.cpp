@@ -3,11 +3,15 @@
 #include <iostream>
 #include <fstream>
 #include <stdlib.h>
+#include <chrono>
+#include <vector>
 #define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
+#define SCALE 4
 #define WINDOW_WIDTH 128
 
-//#DEFINE DEBUG
+//#define DEBUG
+#define PERF_LOG
 
 // Set nth bit of target to value
 #define BIT_SET(target, n, value) (target = (target & ~(1ULL << n)) | (value << n))
@@ -74,6 +78,7 @@ struct Registers {
     unsigned short PC = 0;
     unsigned short SP = 0;
     unsigned short IX = 0;
+    unsigned short RF = 1024; 
     // CV, MD, MX
 };
 
@@ -118,7 +123,7 @@ class Emulator {
         }
 
         bool is_2byte_register(unsigned char type){
-            return type >= 0x0A && type <= 0x0E;
+            return (type >= 0x0A && type <= 0x0E) or type == 0x14;
         }
 
         void get_types(unsigned amount, unsigned char* result){
@@ -157,6 +162,8 @@ class Emulator {
                     return state.registers.SP;
                 case 0x0C: // IX
                     return state.registers.IX;
+                case 0x14:
+                    return state.registers.RF;
             }
             printf("Invalid type %d\n", type);
             return 0;
@@ -206,6 +213,9 @@ class Emulator {
                     break;
                 case 0x0C: // IX
                     state.registers.IX = value;
+                    break;
+                case 0x14:
+                    state.registers.RF = value;
                     break;
             }
         }
@@ -517,21 +527,33 @@ class Emulator {
         }
 
 
-        void UpdateDisplay(SDL_Renderer *renderer){
+        std::chrono::duration<double> UpdateDisplay(SDL_Renderer *renderer){
+            auto start = std::chrono::high_resolution_clock::now();
             const int startAddr = 0xC000;
-            unsigned value;
+            unsigned char value;
+            unsigned pos;
+            uint8_t p_r = 0, p_g = 0, p_b = 0;
             uint8_t r, g, b;
-            for (int y = 0; y < WINDOW_WIDTH; y++){
-                for (int x = 0; x < WINDOW_WIDTH; x++){
-                    value = state.memory[startAddr + ((128 * y) + x)];
-                    r = ((value >> 5) / 0b111) * 255;
-                    g = (((value >> 2) & 0b111) / 0b111) * 255;
-                    b = ((value & 0b11) / 0b11) * 255;
-                    SDL_SetRenderDrawColor(renderer, r, g, b, 255);
+
+            for (short y = 0; y < WINDOW_WIDTH; y++){
+                for (short x = 0; x < WINDOW_WIDTH; x++){
+                    pos = ((128 * y) + x);
+                    value = state.memory[startAddr + pos];
+                    
+                    r = ((value >> 5) / 7.0) * 255;
+                    g = (((value >> 2) & 0b111) / 7.0) * 255;
+                    b = ((value & 0b11) / 3.0) * 255;
+                    
+                    if (r != p_r or g != p_g or b != p_b){
+                        SDL_SetRenderDrawColor(renderer, r, g, b, 255);
+                        p_r = r, p_g = g, p_b = b;
+                    }
                     SDL_RenderDrawPoint(renderer, x, y);
                 }
             }
             SDL_RenderPresent(renderer);
+            auto finish = std::chrono::high_resolution_clock::now();
+            return finish - start;
         }
 
 
@@ -543,9 +565,12 @@ class Emulator {
             SDL_Renderer *renderer;
             SDL_Window *window;
             SDL_Init(SDL_INIT_VIDEO);
-            SDL_CreateWindowAndRenderer(WINDOW_WIDTH, WINDOW_WIDTH, 0, &window, &renderer);
+            SDL_CreateWindowAndRenderer(WINDOW_WIDTH*SCALE, WINDOW_WIDTH*SCALE, 0, &window, &renderer);
+            SDL_RenderSetScale(renderer, SCALE, SCALE);
             
             int counter = 0;
+            double total;
+            int redraw_cout;
 
             while (1){
                 unsigned char opcode = read_byte();
@@ -589,9 +614,14 @@ class Emulator {
                     break;
 
                 counter += 1;
-                if (counter % 128 == 0){
+                if (counter % state.registers.RF == 0){
                     counter = 1;
-                    UpdateDisplay(renderer);
+                    auto elapsed = UpdateDisplay(renderer);
+                    total += elapsed.count();
+                    redraw_cout += 1;
+                    #ifdef PERF_LOG
+                    std::cout << "Average Display Update Time: " << total/redraw_cout << " s\n";
+                    #endif
                 }
             }
             SDL_DestroyRenderer(renderer);
