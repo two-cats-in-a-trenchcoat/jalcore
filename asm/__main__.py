@@ -47,10 +47,14 @@ def assemble(instructions: list):
         return INSTRUCTIONS.index(opcode.lower())
 
     def get_reg(t: str):
-        return REGISTERS.index(t)
+        return REGISTERS.index(t.lower())
 
     def get_identifier(t: str, v):
-        if t == "addr" or t == "jmp_pointer":
+        if t == "addr":
+            if v[0] == "cv":
+                return 0x11 # MD
+            return 0x13 # MV
+        if t == "jmp_pointer":
             return 0x11
         elif t == "cv":
             if v > 255:
@@ -58,15 +62,21 @@ def assemble(instructions: list):
             return 0x0F # CV8
         return get_reg(v)
 
-    def split(t, v):
-        if t == "reg":
+    def split(param_type, value):
+        if param_type == "reg":
             return b""
-        i = get_identifier(t, v).to_bytes(2, "little")
-        if t == "jmp_pointer":
-            return jmp_points[v].to_bytes(2, "little")
-        if t == "addr" or i == 0x10:
-            return v.to_bytes(2, "little")
-        return v.to_bytes(1, "little")
+        i = get_identifier(param_type, value)
+        if param_type == "jmp_pointer":
+            return jmp_points[value].to_bytes(2, "little")
+        if i == 0x10:
+            return value.to_bytes(2, "little")
+        if param_type == "addr":
+            if value[0] == "cv":
+                return value[1].to_bytes(2, "little")
+            x = bytes([0x13, get_identifier(*value), *split(*value)])
+            print("MV", x)
+            return x
+        return value.to_bytes(1, "little")
     
     for opcode, params in instructions:
         if opcode == "jmp_point":
@@ -75,12 +85,12 @@ def assemble(instructions: list):
         o = get_opcode(opcode)
         #print(hex(o), end=" ")
         result.append(o)
-        for t, v in params: # add identifiers
+        for param_type, value in params: # add identifiers
             #print(t, end=" ")
-            result.append(get_identifier(t, v))
+            result.append(get_identifier(param_type, value))
         #print()
-        for t, v in params: # push values
-            result.extend(split(t, v))
+        for param_type, value in params: # push values
+            result.extend(split(param_type, value))
     
     return result
 

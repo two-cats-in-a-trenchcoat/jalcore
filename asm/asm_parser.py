@@ -123,7 +123,7 @@ class CustomParser(GeneratedParser):
             return parts
         self.goto(pos)
         return None
-    @memoize
+    @memoize_left_rec
     def factor(self):
         pos = self.mark()
         parts = []
@@ -133,7 +133,7 @@ class CustomParser(GeneratedParser):
                 self.fail()
                 break
             parts.append(part)
-            part = self.item()
+            part = self.factor()
             if not self.match(part):
                 self.fail()
                 break
@@ -145,7 +145,7 @@ class CustomParser(GeneratedParser):
             parts.append(part)
             # match:
             i = parts[1]
-            return ("addr", i[1])
+            return ("addr", i)
         self.goto(pos)
         
         parts = []
@@ -157,12 +157,12 @@ class CustomParser(GeneratedParser):
             parts.append(part)
             # match:
             i = parts[0]
-            return ("reg" if i.value in REGISTERS else "jmp_pointer", i.value)
+            return ("reg" if i.value.lower() in REGISTERS else "jmp_pointer", i.value)
         self.goto(pos)
         
         parts = []
         for _ in range(1):
-            part = self.item()
+            part = self.num()
             if not self.match(part):
                 self.fail()
                 break
@@ -175,7 +175,7 @@ class CustomParser(GeneratedParser):
         return None
         
     @memoize
-    def item(self):
+    def num(self):
         pos = self.mark()
         parts = []
         for _ in range(1):

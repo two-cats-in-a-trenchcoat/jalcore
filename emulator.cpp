@@ -2,6 +2,12 @@
 #include <string>
 #include <iostream>
 #include <fstream>
+#include <stdlib.h>
+#define SDL_MAIN_HANDLED
+#include <SDL2/SDL.h>
+#define WINDOW_WIDTH 128
+
+//#DEFINE DEBUG
 
 // Set nth bit of target to value
 #define BIT_SET(target, n, value) (target = (target & ~(1ULL << n)) | (value << n))
@@ -76,6 +82,7 @@ const unsigned char CV8 = 0x0F;
 const unsigned char CV16 = 0x10;
 const unsigned char MD = 0x11;
 const unsigned char MX = 0x12;
+const unsigned char MV = 0x13;
 
 struct State {
     Registers registers;
@@ -105,7 +112,7 @@ class Emulator {
         unsigned read_number(unsigned numBytes){
             unsigned char b1 = read_byte();
             unsigned char b2 = read_byte();
-            unsigned result = (b2 << 4) + (b1);
+            unsigned result = (b2 << 8) + (b1);
             //printf("%s %s -> %d\n", getHex(b1).c_str(), getHex(b2).c_str(), result);
             return result;
         }
@@ -209,6 +216,13 @@ class Emulator {
                 unsigned value = state.memory[addr];
                 return Operand {value, addr, "Mx"};
             }
+            else if (type == MV){
+                unsigned char _type = read_byte();
+                Operand addr = get_aop(_type);
+                addr.type = "Mx";
+                addr.target = addr.value;
+                return addr;
+            }
             else if (type == CV8) return Operand {read_byte(), 0, "CV8"}; // 8 bit Constant
             else if (type == CV16) return Operand {read_number(2), 0, "CV16"}; // 16 bit Constant
             
@@ -251,7 +265,7 @@ class Emulator {
             Operand params[1];
             get_params(1, params);
             Operand tar = params[0];
-            unsigned result = tar.value - 1;
+            unsigned result = tar.value + 1;
             store(tar, result);
             setFlag("S0", 1, result == 0); // zero flag
         }
@@ -469,7 +483,7 @@ class Emulator {
             result += state.memory[state.registers.SP];
             state.registers.SP--;
             if (is_2byte_register(tar.target)){
-                result << 8;
+                result <<= 8;
                 result += state.memory[state.registers.SP];
                 state.registers.SP--;
             }
@@ -498,17 +512,46 @@ class Emulator {
             get_params(2, params);
             Operand src = params[0];
             Operand tar = params[1];
+            //printf("new val: %d address: %#x  - ", src.value, tar.target);
             store(tar, src.value);
         }
 
+
+        void UpdateDisplay(SDL_Renderer *renderer){
+            const int startAddr = 0xC000;
+            unsigned value;
+            uint8_t r, g, b;
+            for (int y = 0; y < WINDOW_WIDTH; y++){
+                for (int x = 0; x < WINDOW_WIDTH; x++){
+                    value = state.memory[startAddr + ((128 * y) + x)];
+                    r = ((value >> 5) / 0b111) * 255;
+                    g = (((value >> 2) & 0b111) / 0b111) * 255;
+                    b = ((value & 0b11) / 0b11) * 255;
+                    SDL_SetRenderDrawColor(renderer, r, g, b, 255);
+                    SDL_RenderDrawPoint(renderer, x, y);
+                }
+            }
+            SDL_RenderPresent(renderer);
+        }
 
 
         // Execution loop
 
         void execute(){
+            // initialise window
+            SDL_Event event;
+            SDL_Renderer *renderer;
+            SDL_Window *window;
+            SDL_Init(SDL_INIT_VIDEO);
+            SDL_CreateWindowAndRenderer(WINDOW_WIDTH, WINDOW_WIDTH, 0, &window, &renderer);
+            
+            int counter = 0;
+
             while (1){
                 unsigned char opcode = read_byte();
+                #ifdef DEBUG
                 printf("Opcode: %s\n", getHex(opcode).c_str());
+                #endif
                 switch (opcode){
                     case 0x00: op_inc(); break;
                     case 0x01: op_dec(); break;
@@ -542,7 +585,18 @@ class Emulator {
                     //printf(memory.hex())
                     break;
                 }
+                if (SDL_PollEvent(&event) && event.type == SDL_QUIT)
+                    break;
+
+                counter += 1;
+                if (counter % 128 == 0){
+                    counter = 1;
+                    UpdateDisplay(renderer);
+                }
             }
+            SDL_DestroyRenderer(renderer);
+            SDL_DestroyWindow(window);
+            SDL_Quit();
         }
 };
 

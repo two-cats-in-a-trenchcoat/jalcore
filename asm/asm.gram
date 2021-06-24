@@ -7,8 +7,8 @@ instruction
 params  :  first=factor rest=(COMMA factor)* { process_params(first, rest) };
 
 factor
-    :  LPAREN i=item RPAREN { ("addr", i[1]) };
-    :  i=ID { ("reg" if i.value in REGISTERS else "jmp_pointer", i.value) };
-    :  i=item { i };
+    :  LPAREN i=factor RPAREN { ("addr", i) };
+    :  i=ID { ("reg" if i.value.lower() in REGISTERS else "jmp_pointer", i.value) };
+    :  i=num { i };
 
-item  :  i= INT | HEX | BIN { ("cv", i.value) };
+num  :  i= INT | HEX | BIN { ("cv", i.value) };
