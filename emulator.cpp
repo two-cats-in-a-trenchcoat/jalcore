@@ -4,7 +4,8 @@
 #include <fstream>
 #include <stdlib.h>
 #include <chrono>
-#include <vector>
+#include <thread>
+#include <cmath>
 #define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
 #define SCALE 4
@@ -78,7 +79,7 @@ struct Registers {
     unsigned short PC = 0;
     unsigned short SP = 0;
     unsigned short IX = 0;
-    unsigned short RF = 1024; 
+    unsigned short RF = 60; 
     // CV, MD, MX
 };
 
@@ -98,6 +99,9 @@ struct State {
 class Emulator {
     public:
         State state;
+        bool isRunning = false;
+        double cycle_total;
+        int cycle_counter;
         
         Emulator(State _state){
             state = _state;
@@ -553,34 +557,11 @@ class Emulator {
             return finish - start;
         }
 
-
         // Execution loop
 
         void execute(){
-            // initialise window
-            SDL_Event event;
-            SDL_Renderer *renderer;
-            SDL_Window *window;
-            SDL_Init(SDL_INIT_VIDEO);
-            SDL_CreateWindowAndRenderer(WINDOW_WIDTH*SCALE, WINDOW_WIDTH*SCALE, 0, &window, &renderer);
-            SDL_RenderSetScale(renderer, SCALE, SCALE);
-            SDL_Texture *texture = SDL_CreateTexture(
-                renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, WINDOW_WIDTH, WINDOW_WIDTH
-            );
-            Uint32 * pixels = new Uint32[WINDOW_WIDTH * WINDOW_WIDTH];
-            memset(pixels, 0, WINDOW_WIDTH * WINDOW_WIDTH * sizeof(Uint32));
-            
-            int counter = 0;
-            double redraw_total;
-            int redraw_count;
-
-            double cycle_total = 0;
-            int cycle_counter = 0;
             std::chrono::duration<double> cycle_time;
-
-            auto exec_start = std::chrono::high_resolution_clock::now();
-
-            while (1){
+            while (isRunning){
                 auto cycle_start = std::chrono::high_resolution_clock::now();
                 unsigned char opcode = read_byte();
                 #ifdef DEBUG
@@ -612,7 +593,6 @@ class Emulator {
                         printf("Unexpected opcode %#x, PC: %d", opcode, state.registers.PC);
                         exit(1);
                 }
-
                 auto cycle_end = std::chrono::high_resolution_clock::now();
                 cycle_counter += 1;
                 cycle_time = cycle_end - cycle_start;
@@ -622,34 +602,74 @@ class Emulator {
                 if (getFlag("S0", 4)){
                     printf("Halted\n");
                     //printf(memory.hex())
-                    break;
-                }
-                if (SDL_PollEvent(&event) && event.type == SDL_QUIT)
-                    break;
-
-                counter += 1;
-                if (counter % state.registers.RF == 0){
-                    counter = 1;
-                    auto elapsed = UpdateDisplay(renderer, texture, pixels);
-                    redraw_total += elapsed.count();
-                    redraw_count += 1;
-                    #ifdef PERF_LOG
-                    std::cout << "Average Display Update Time: " << redraw_total/redraw_count << " s\n";
-                    #endif
+                    isRunning = false;
                 }
             }
+        }
+
+        void mainloop(){
+            // initialise execution thread
+            isRunning = true;
+            cycle_total = 0;
+            cycle_counter = 0;
+            std::thread exec_thread (execute, this);
+
+            // initialise window
+            SDL_Event event;
+            SDL_Renderer *renderer;
+            SDL_Window *window;
+            SDL_Init(SDL_INIT_VIDEO);
+            SDL_CreateWindowAndRenderer(WINDOW_WIDTH*SCALE, WINDOW_WIDTH*SCALE, 0, &window, &renderer);
+            SDL_RenderSetScale(renderer, SCALE, SCALE);
+            SDL_Texture *texture = SDL_CreateTexture(
+                renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, WINDOW_WIDTH, WINDOW_WIDTH
+            );
+            Uint32 * pixels = new Uint32[WINDOW_WIDTH * WINDOW_WIDTH];
+            memset(pixels, 0, WINDOW_WIDTH * WINDOW_WIDTH * sizeof(Uint32));
+            
+            int counter = 0;
+            double redraw_total;
+            int redraw_count;
+
+            auto exec_start = std::chrono::high_resolution_clock::now();
+            while (isRunning){
+                auto start = std::chrono::high_resolution_clock::now();
+                while (SDL_PollEvent(&event)){
+                    if (event.type == SDL_QUIT) isRunning = false;
+                }
+                
+                auto elapsed = UpdateDisplay(renderer, texture, pixels);
+                redraw_total += elapsed.count();
+                redraw_count += 1;
+                #ifdef PERF_LOG
+                std::cout << "Average Display Update Time: " << redraw_total/redraw_count << " s\n";
+                #endif
+
+                // enforce frame rate
+                unsigned rate = state.registers.RF;
+                auto end = std::chrono::high_resolution_clock::now();
+	            std::chrono::duration<double> frame_elapsed = end - start;
+                double elapsedMS = frame_elapsed.count() * 1000;
+	            // Cap to FPS in RF register
+	            SDL_Delay(std::max(0.0, floor((1000 / rate) - elapsedMS)));
+                
+            }
+            std::chrono::duration<double> exec_time = std::chrono::high_resolution_clock::now() - exec_start;
+            
             std::cout << "Display Redraws: " << redraw_count << "\n";
             std::cout << "Time spent Drawing: " << redraw_total << "s\n";
             std::cout << "Average Display Update Time: " << (redraw_total/redraw_count)*1000 << " ms\n";
+            std::cout << "Average Framerate: " << redraw_count / exec_time.count() << "\n\n";
             
             std::cout << "Cycles: " << cycle_counter << "\n";
             std::cout << "Time spent on cycles: " << cycle_total << "s\n";
-            std::cout << "Average Cycle Time: " << (cycle_total/cycle_counter)*1000 << " ms\n";
-            std::chrono::duration<double> exec_time = std::chrono::high_resolution_clock::now() - exec_start;
+            std::cout << "Average Cycle Time: " << (cycle_total/cycle_counter)*1000 << " ms\n\n";
+            
             
             
             std::cout << "Execution time: " << exec_time.count() << "s\n";
             std::cout << "Instructions per second: " << 1 / (exec_time.count() / cycle_counter) << "hz\n";
+            exec_thread.join();
             delete[] pixels;
             SDL_DestroyTexture(texture);
             SDL_DestroyRenderer(renderer);
@@ -679,7 +699,7 @@ int main(int argc, char* argv[]){
     }
     State state {Registers {}, memory, 0xFFFF};
     Emulator emu {state};
-    emu.execute();
+    emu.mainloop();
     // dump to core.bin
     FILE* file = fopen("core.bin", "w+");
     if (file != NULL){

@@ -1,5 +1,5 @@
 mov $C000, ix
-mov $1000, rf  ;  set referesh frequency
+mov 60, rf  ;  set framerate
 mov 0, r1 ; color
 
 drawer:

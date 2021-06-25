@@ -1,5 +1,5 @@
 mov $C000, ix
-mov $1000, rf  ;  set referesh frequency
+mov 60, rf  ;  set framerate
 
 drawer:
     mov r0, [ix]  ;  set pixel

@@ -1,3 +1,4 @@
+#include <cstdio>
 #define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
 #define SCALE 4
@@ -12,6 +13,10 @@ int main(){
     SDL_Init(SDL_INIT_VIDEO);
     SDL_CreateWindowAndRenderer(WINDOW_WIDTH*SCALE, WINDOW_WIDTH*SCALE, 0, &window, &renderer);
     SDL_RenderSetScale(renderer, SCALE, SCALE);
+
+    SDL_version ver;
+    SDL_GetVersion(&ver);
+    printf("%d.%d.%d", ver.major, ver.minor, ver.patch);
 
     unsigned char value = 0;
     unsigned pos;
@@ -35,10 +40,11 @@ int main(){
         }
     }
     SDL_RenderPresent(renderer);
-
-    while (1){
-        if (SDL_PollEvent(&event) && event.type == SDL_QUIT)
-            break;
+    bool isRunning;
+    while (isRunning){
+        while (SDL_PollEvent(&event)){
+            if (event.type == SDL_QUIT) isRunning = false;
+        }
     }
 
     SDL_DestroyRenderer(renderer);
