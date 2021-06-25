@@ -1,2 +1,2 @@
-# MiniPU
-Verilog-based CPU design for all your processing needs.
+# The Jalcore V1 CPU
+Virtual CPU design for all your processing needs.
