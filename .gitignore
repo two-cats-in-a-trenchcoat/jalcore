@@ -1,5 +1,4 @@
 .vscode
 *.exe
 *.bin
-*.csv
 __pycache__
