@@ -1,0 +1,21 @@
+"Mnemonic","Opcode","Operands","Description"
+"INC","$00","<tar>(8R, 16R, Mx) <tar-aop>",
+"DEC","$01","<tar>(8R, 16R, Mx) <tar-aop>",
+"ADD","$02","<src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>","Add src to tar without carry"
+"ADDC","$03","<src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>","Add src to tar with carry"
+"SUB","$04","<src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>","subtract src from tar without borrow"
+"SUBB","$05","<src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>","subtract src from tar with borrow"
+"ROL","$06","<src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>",
+"ROLC","$07","<src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>",
+"ROR","$08","<src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>",
+"RORC","$09","<src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>",
+"AND","$0A","<src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>",
+"OR","$0B","<src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>","or src with tar"
+"XOR","$0C","<src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>",
+"CMP","$0D","<src1>(CV, 8R, 16R, Mx) <src2>(CV, 8R, 16R, Mx) <src1-aop> <src2-aop>",
+"PUSH","$0E","<src>(CV, 8R, 16R, Mx)",
+"POP","$0F","<tar>(8R, 16R, Mx)",
+"JMP","$10","<src>(CV8) <tar>(Mx) <src-aop> <tar-aop>","jump to tar if status bit <src> is 1, bit 7 of src inverts the choice"
+"JSR","$11",,
+"NOP","$12",,
+"MOV","$13","<src>(CV, 8R, 16R, Mx) <tar>(8R, 16R, Mx) <src-aop> <tar-aop>","Move (copy) src to tar"
