@@ -11,7 +11,7 @@
 #define WINDOW_WIDTH 128
 
 //#define DEBUG
-#define PERF_LOG
+//#define PERF_LOG
 
 // Set nth bit of target to value
 #define BIT_SET(target, n, value) (target = (target & ~(1ULL << n)) | (value << n))
@@ -51,7 +51,7 @@ struct Registers {
     unsigned char R5 = 0;
     unsigned char R6 = 0;
     unsigned char R7 = 0;
-    unsigned char S0 = 0;
+    unsigned char S0 = 0b10000000;
     unsigned char S1 = 0;
     /*
         Flags in S0 (MSB to LSB)
@@ -511,7 +511,7 @@ class Emulator {
             BIT_SET(src.value, 7, 0);
             bool flagSet;
             if (src.value <= 7) flagSet = getFlag("S0", src.value);
-            else getFlag("S1", src.value);
+            else flagSet = getFlag("S1", src.value-7);
             flagSet ^= flip;
             if (flagSet) state.registers.PC = tar.target;
         }
@@ -527,12 +527,12 @@ class Emulator {
         }
 
 
-        std::chrono::duration<double> UpdateDisplay(SDL_Renderer *renderer){
+        std::chrono::duration<double> UpdateDisplay(SDL_Renderer *renderer, SDL_Texture *texture, Uint32 *pixels){
+            SDL_UpdateTexture(texture, NULL, pixels, WINDOW_WIDTH * sizeof(Uint32));
             auto start = std::chrono::high_resolution_clock::now();
             const int startAddr = 0xC000;
             unsigned char value;
             unsigned pos;
-            uint8_t p_r = 0, p_g = 0, p_b = 0;
             uint8_t r, g, b;
 
             for (short y = 0; y < WINDOW_WIDTH; y++){
@@ -544,13 +544,11 @@ class Emulator {
                     g = (((value >> 2) & 0b111) / 7.0) * 255;
                     b = ((value & 0b11) / 3.0) * 255;
                     
-                    if (r != p_r or g != p_g or b != p_b){
-                        SDL_SetRenderDrawColor(renderer, r, g, b, 255);
-                        p_r = r, p_g = g, p_b = b;
-                    }
-                    SDL_RenderDrawPoint(renderer, x, y);
+                    pixels[pos] = (r << 16) + (b << 8) + g;
                 }
             }
+            SDL_RenderClear(renderer);
+            SDL_RenderCopy(renderer, texture, NULL, NULL);
             SDL_RenderPresent(renderer);
             auto finish = std::chrono::high_resolution_clock::now();
             return finish - start;
@@ -567,6 +565,11 @@ class Emulator {
             SDL_Init(SDL_INIT_VIDEO);
             SDL_CreateWindowAndRenderer(WINDOW_WIDTH*SCALE, WINDOW_WIDTH*SCALE, 0, &window, &renderer);
             SDL_RenderSetScale(renderer, SCALE, SCALE);
+            SDL_Texture *texture = SDL_CreateTexture(
+                renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, WINDOW_WIDTH, WINDOW_WIDTH
+            );
+            Uint32 * pixels = new Uint32[WINDOW_WIDTH * WINDOW_WIDTH];
+            memset(pixels, 0, WINDOW_WIDTH * WINDOW_WIDTH * sizeof(Uint32));
             
             int counter = 0;
             double total;
@@ -616,7 +619,7 @@ class Emulator {
                 counter += 1;
                 if (counter % state.registers.RF == 0){
                     counter = 1;
-                    auto elapsed = UpdateDisplay(renderer);
+                    auto elapsed = UpdateDisplay(renderer, texture, pixels);
                     total += elapsed.count();
                     redraw_cout += 1;
                     #ifdef PERF_LOG
@@ -624,6 +627,9 @@ class Emulator {
                     #endif
                 }
             }
+            std::cout << "Average Display Update Time: " << total/redraw_cout << " s\n";
+            delete[] pixels;
+            SDL_DestroyTexture(texture);
             SDL_DestroyRenderer(renderer);
             SDL_DestroyWindow(window);
             SDL_Quit();
