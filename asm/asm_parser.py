@@ -18,7 +18,7 @@ class CustomParser(GeneratedParser):
             parts.append(part)
             # match:
             p = parts[0]
-            return p
+            return Block(p)
         self.goto(pos)
         
         return None
@@ -50,7 +50,7 @@ class CustomParser(GeneratedParser):
             parts.append(part)
             # match:
             i = parts[0]
-            return "jmp_point", i.value
+            return JumpPoint(i.value)
         self.goto(pos)
         
         parts = []
@@ -68,7 +68,7 @@ class CustomParser(GeneratedParser):
             # match:
             opcode = parts[0]
             params = parts[1]
-            return (opcode.value, params)
+            return Instruction(opcode.value, params)
         self.goto(pos)
         
         return None
@@ -145,7 +145,7 @@ class CustomParser(GeneratedParser):
             parts.append(part)
             # match:
             i = parts[1]
-            return ("addr", i)
+            return Address(i)
         self.goto(pos)
         
         parts = []
@@ -157,7 +157,7 @@ class CustomParser(GeneratedParser):
             parts.append(part)
             # match:
             i = parts[0]
-            return ("reg" if i.value.lower() in REGISTERS else "jmp_pointer", i.value)
+            return Register(i.value.lower()) if i.value.lower() in REGISTERS else JumpPointer(i.value)
         self.goto(pos)
         
         parts = []
@@ -186,7 +186,7 @@ class CustomParser(GeneratedParser):
             parts.append(part)
             # match:
             i = parts[0]
-            return ("cv", i.value)
+            return Number(i.value)
         self.goto(pos)
         
         return None

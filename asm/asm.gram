@@ -1,14 +1,14 @@
-program  : p=instruction* { p };
+program  : p=instruction* { Block(p) };
 
 instruction
-    :  i=ID COLON { "jmp_point", i.value };
-    :  opcode=INSTRUCTION params=params { (opcode.value, params) };
+    :  i=ID COLON { JumpPoint(i.value) };
+    :  opcode=INSTRUCTION params=params { Instruction(opcode.value, params) };
 
 params  :  first=factor rest=(COMMA factor)* { process_params(first, rest) };
 
 factor
-    :  LPAREN i=factor RPAREN { ("addr", i) };
-    :  i=ID { ("reg" if i.value.lower() in REGISTERS else "jmp_pointer", i.value) };
+    :  LPAREN i=factor RPAREN { Address(i) };
+    :  i=ID { Register(i.value.lower()) if i.value.lower() in REGISTERS else JumpPointer(i.value) };
     :  i=num { i };
 
-num  :  i= INT | HEX | BIN { ("cv", i.value) };
+num  :  i= INT | HEX | BIN { Number(i.value) };
