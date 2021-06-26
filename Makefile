@@ -2,7 +2,7 @@
 CC=g++
 CFLAGS=-lSDL2 -lSDL2main -O2
 
-TARGET=jalcore1-v0.1.exe
+TARGET=jalcore1-0.1.0.exe
 TARGET2=compatest.exe
 SRC=emulator.cpp
 SRC2=software/devdemos/display_colors.cpp
