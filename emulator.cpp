@@ -520,6 +520,29 @@ class Emulator {
             if (flagSet) state.registers.PC = tar.target;
         }
 
+        void op_jsr(){
+            // jsr <src>(CV) <tar>(Mx) <src-aop> <tar-aop>
+            Operand params[2];
+            get_params(2, params);
+            Operand src = params[0];
+            Operand tar = params[1];
+            //printf("src: %x target: %d\n", src.value, tar.target);
+            bool flip = BIT_CHECK(src.value, 7);
+            BIT_SET(src.value, 7, 0);
+            bool flagSet;
+            if (src.value <= 7) flagSet = getFlag("S0", src.value);
+            else flagSet = getFlag("S1", src.value-7);
+            flagSet ^= flip;
+            if (flagSet){
+                // push PC to stack before jumping
+                state.memory[state.registers.SP] = state.registers.PC;
+                state.registers.SP++;
+                state.memory[state.registers.SP] = state.registers.PC >> 8;
+                state.registers.SP++;
+                state.registers.PC = tar.target;
+            }
+        }
+
         void op_mov(){
             // mov <src>(CV, 8R, 16R, Mx) <tar>(8R, 16R, Mx) <src-aop> <tar-aop>
             Operand params[2];
@@ -528,6 +551,16 @@ class Emulator {
             Operand tar = params[1];
             //printf("new val: %d address: %#x  - ", src.value, tar.target);
             store(tar, src.value);
+        }
+
+        void op_ret(){
+            unsigned result;
+            result += state.memory[state.registers.SP];
+            state.registers.SP--;
+            result <<= 8;
+            result += state.memory[state.registers.SP];
+            state.registers.SP--;
+            state.registers.PC = result;
         }
 
 
@@ -585,9 +618,10 @@ class Emulator {
                     case 0x0E: op_push(); break;
                     case 0x0F: op_pop(); break;
                     case 0x10: op_jmp(); break;
-                    //case 0x11: op_jsr(); break;
+                    case 0x11: op_jsr(); break;
                     case 0x12: break; // nop
                     case 0x13: op_mov(); break;
+                    case 0x14: op_ret(); break;
                     // TODO: implement bit shifting instructions and other logic ops
                     default:
                         printf("Unexpected opcode %#x, PC: %d", opcode, state.registers.PC);

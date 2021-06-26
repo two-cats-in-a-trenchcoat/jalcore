@@ -24,7 +24,7 @@ class AsmLexer(Lexer):
         t.value = int(t.value[1:], base=2)
         return t
 
-    INSTRUCTION = r'(inc)|(dec)|(add)|(addc)|(sub)|(subb)|(rol)|(rolc)|(ror)|(rorc)|(and)|(or)|(xor)|(cmp)|(push)|(pop)|(jmp)|(jsr)|(nop)|(mov)'
+    INSTRUCTION = r'(inc)|(dec)|(add)|(addc)|(sub)|(subb)|(rol)|(rolc)|(ror)|(rorc)|(and)|(or)|(xor)|(cmp)|(push)|(pop)|(jmp)|(jsr)|(nop)|(mov)|(ret)'
 
     ID = r"[a-zA-Z_][a-zA-Z0-9_]*"
     COMMA = r","

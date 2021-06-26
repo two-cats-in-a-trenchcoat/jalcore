@@ -16,6 +16,7 @@
 "PUSH","$0E","<src>(CV, 8R, 16R, Mx)",
 "POP","$0F","<tar>(8R, 16R, Mx)",
 "JMP","$10","<src>(CV8) <tar>(Mx) <src-aop> <tar-aop>","jump to tar if status bit <src> is 1, bit 7 of src inverts the choice"
-"JSR","$11",,
+"JSR","$11","<src>(CV8) <tar>(Mx) <src-aop> <tar-aop>",
 "NOP","$12",,
 "MOV","$13","<src>(CV, 8R, 16R, Mx) <tar>(8R, 16R, Mx) <src-aop> <tar-aop>","Move (copy) src to tar"
+"RET","$14",,

@@ -49,4 +49,5 @@ INSTRUCTIONS = [
     "jsr",
     "nop",
     "mov",
+    "ret",
 ]
