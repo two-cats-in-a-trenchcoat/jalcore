@@ -1,2 +1,2 @@
-# The JAlcore V1 CPU
-Virtual CPU design for all your processing needs.
+# Jalcore simulated 8-bit CPU
+A fully-fledged, 8MHz CPU Running in C++. Also, free bloatware.
