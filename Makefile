@@ -1,6 +1,6 @@
 # Jalcore1 Emulator makefile.
 CC=g++
-CFLAGS=-lSDL2 -lSDL2main
+CFLAGS=-lSDL2 -lSDL2main -O3
 
 TARGET=jalcore1-v0.1.exe
 TARGET2=compatest.exe
