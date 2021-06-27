@@ -480,11 +480,11 @@ class Emulator {
             Operand params[1];
             get_params(1, params);
             Operand src = params[0];
-            store(Operand { 0, state.registers.SP + 1U, "Mx" }, src.value);
             state.registers.SP++;
+            store(Operand { 0, state.registers.SP, "Mx" }, src.value);
             if (src.type == "CV16" || is_2byte_register(src.target)){
-                store(Operand { 0, state.registers.SP + 2U, "Mx" }, src.value >> 8);
                 state.registers.SP++;
+                store(Operand { 0, state.registers.SP, "Mx" }, src.value >> 8);
             }
         }
 
@@ -493,7 +493,7 @@ class Emulator {
             Operand params[1];
             get_params(1, params);
             Operand tar = params[0];
-            unsigned result;
+            unsigned result = 0;
             result += state.memory[state.registers.SP];
             state.registers.SP--;
             if (is_2byte_register(tar.target)){
@@ -535,10 +535,10 @@ class Emulator {
             flagSet ^= flip;
             if (flagSet){
                 // push PC to stack before jumping
+                state.registers.SP++;
                 state.memory[state.registers.SP] = state.registers.PC;
                 state.registers.SP++;
                 state.memory[state.registers.SP] = state.registers.PC >> 8;
-                state.registers.SP++;
                 state.registers.PC = tar.target;
             }
         }
@@ -554,7 +554,7 @@ class Emulator {
         }
 
         void op_ret(){
-            unsigned result;
+            unsigned result = 0;
             result += state.memory[state.registers.SP];
             state.registers.SP--;
             result <<= 8;
@@ -661,9 +661,8 @@ class Emulator {
             Uint32 * pixels = new Uint32[WINDOW_WIDTH * WINDOW_WIDTH];
             memset(pixels, 0, WINDOW_WIDTH * WINDOW_WIDTH * sizeof(Uint32));
             
-            int counter = 0;
-            double redraw_total;
-            int redraw_count;
+            double redraw_total = 0;
+            int redraw_count = 1;
 
             auto exec_start = std::chrono::high_resolution_clock::now();
             while (isRunning){
@@ -702,7 +701,7 @@ class Emulator {
             
             
             std::cout << "Execution time: " << exec_time.count() << "s\n";
-            std::cout << "Instructions per second: " << 1 / (exec_time.count() / cycle_counter) << "hz\n";
+            std::cout << "Instructions per second: " << (1 / (exec_time.count() / cycle_counter)) / 1000 / 1000 << "mhz\n";
             exec_thread.join();
             delete[] pixels;
             SDL_DestroyTexture(texture);
