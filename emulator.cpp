@@ -734,11 +734,11 @@ int main(int argc, char* argv[]){
     Emulator emu {state};
     emu.mainloop();
     // dump to core.bin
-    FILE* file = fopen("core.bin", "w+");
+    FILE* file = fopen("core.dmp", "w+");
     if (file != NULL){
         fwrite(state.memory, sizeof(unsigned char), emu.state.size, file);
         fclose(file);
-        printf("Memory dumped to 'core.bin'\n");
+        printf("Memory dumped to 'core.dmp'\n");
     }
     return 0;
 }
