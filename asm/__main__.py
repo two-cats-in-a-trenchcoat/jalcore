@@ -27,11 +27,11 @@ def main():
     if result is None and error is not None:
         print(error) # error handling
     else:
-        print(result)
+        #print(result)
         result = assemble(result)
         with open(options.o, "wb") as f:
             f.write(result)
-        print(", ".join(hex(v) for v in result))
+        #print(", ".join(hex(v) for v in result))
         
 
 if __name__ == "__main__":
