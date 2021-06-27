@@ -2,6 +2,7 @@ from parsergen import Lexer, Token, token
 from parsergen.parser_utils import TokenStream
 from .asm_parser import CustomParser as AsmParser
 from .parser_helpers import *
+from copy import deepcopy
 
 class AsmLexer(Lexer):
 
@@ -24,13 +25,22 @@ class AsmLexer(Lexer):
         t.value = int(t.value[1:], base=2)
         return t
 
-    INSTRUCTION = f"({')|('.join(INSTRUCTIONS)})"
+    MACRO = r"MACRO"
+    ENDMACRO = r"ENDMACRO"
+    MACRO_PARAM = r"\%[a-zA-Z_][a-zA-Z0-9_]*"
 
-    ID = r"[a-zA-Z_][a-zA-Z0-9_]*"
+    @token(r"[a-zA-Z_][a-zA-Z0-9_]*")
+    def ID(self, t: Token):
+        if t.value in INSTRUCTIONS:
+            t.type = "INSTRUCTION"
+        return t
+    
     COMMA = r","
     COLON = r":"
-    LPAREN = r"\["
-    RPAREN = r"\]"
+    LS_PAREN = r"\["
+    RS_PAREN = r"\]"
+    LPAREN = r"\("
+    RPAREN = r"\)"
     
     ignore = " \t"
     ignore_comment = r"\;.*"
@@ -51,6 +61,7 @@ class Assembler:
         self.ast = ast
         self.jump_pointer_addresses = {}
         self.second_pass_targets = {}
+        self.macros: List[MacroDefinition] = []
         self.result = bytearray(0)
     
     def push_byte(self, value):
@@ -114,18 +125,76 @@ class Assembler:
 
         # push operand additional parts
         self.push_additional(instruction.operands)
+    
+    def macro_fits(self, macro: MacroDefinition, call: MacroCall):
+        if macro.name != call.opcode:
+            return False
+        if len(macro.params) != len(call.operands):
+            return False
+        for param, operand in zip(macro.params, call.operands):
+            if not isinstance(operand, tuple(param.allowed_types)):
+                return False
 
-    def first_pass(self):
-        for part in self.ast.body:
+        return True
+    
+    
+    def populate_macro(self, macro: MacroDefinition, call: MacroCall):
+        macro = deepcopy(macro)
+        # clone macro body and populate parameters with actual Operand's
+        def get_replacement(item: MacroParameter):
+            for macro_param, operand in zip(macro.params, call.operands):
+                if macro_param.name == item.name:
+                    return operand
+
+        def populate_list(list: List):
+            for index, item in enumerate(list):
+                if isinstance(item, MacroParameter):
+                    # lookup and populate
+                    rep = get_replacement(item)
+                    if rep:
+                        list[index] = rep
+        
+        def populate_operands(node: AST):
+            if isinstance(node, Block):
+                for part in node.body:
+                    populate_operands(part)
+            elif isinstance(node, (Instruction, MacroCall,)):
+                populate_list(node.operands)
+            elif isinstance(node, MacroDefinition):
+                populate_list(node.params)
+                populate_operands(node.block)
+        
+        populate_operands(macro.block)
+        #print("Expended Macro to", macro.block)
+        self.process_block(macro.block)
+
+    def process_macro_call(self, call: MacroCall):
+        # match parameters and name with defined macros
+        for macro in self.macros:
+            if self.macro_fits(macro, call):
+                self.populate_macro(macro, call)
+                return
+        raise Exception(f"Failed to find matching macro for call {call}")
+
+    def process_block(self, block: Block):
+        for part in block.body:
             print(part)
             if isinstance(part, Instruction):
                 self.process_instruction(part)
             elif isinstance(part, JumpPoint):
                 # set memory address of the JumpPoint
                 self.jump_pointer_addresses[part.name] = len(self.result)
+            elif isinstance(part, MacroDefinition):
+                self.macros.append(part)
+            elif isinstance(part, MacroCall):
+                self.process_macro_call(part)
+
+    def first_pass(self):
+        self.process_block(self.ast)
     
     def second_pass(self):
         for address, name in self.second_pass_targets.items():
+            print(self.jump_pointer_addresses)
             self.result[address:address+2] = self.jump_pointer_addresses[name].to_bytes(2, "little")
     
     def assemble(self):
