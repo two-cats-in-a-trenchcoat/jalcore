@@ -2,9 +2,16 @@
 A fully-fledged, 8MHz CPU Running in C++. Also, free bloatware.
 
 # Build Instructions (on Windows with g++)
-1. Install the [SDL2 development libraries](https://libsdl.org/release/SDL2-devel-2.0.14-mingw.tar.gz)
-2. run the make file: `mingw32-make emulator`
-If you don't want to build it yourself you can visit the releases page where there will be pre-built stable versions.
+1. Install [SDL2](https://wiki.libsdl.org/Installation)
+2. Navigate to your jalcore install folder.
+3. Run the make file using your make command of choice  e.g: `mingw32-make`, `make`, `cmake`
+4. The make options are `emulator`, `standalone-release`, `compatest`, and `standalone-compatest`
+If You don't want to build it yourself you can visit the releases page where there will be pre-built stable versions.
+This is also possible with visual C++, but requires special setup and manually compiling the files.
 
 # Build Instructions (on Linux with g++)
 1. Install [SDL2](https://wiki.libsdl.org/Installation)
+2. Navigate to your jalcore install folder.
+3. Run the makefile with `make` or `cmake`
+4. The make options are `emulator`, `standalone-release`, `compatest`, and `standalone-compatest`
+There are no standalone releases for linux, due to the fact that neither of us have the capabilities to compile on linux, although with the current state of Windows 11 that might change soon. WINE or virtualisation only, sorry!
