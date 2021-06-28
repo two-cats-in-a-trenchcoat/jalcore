@@ -194,7 +194,6 @@ class Assembler:
     
     def second_pass(self):
         for address, name in self.second_pass_targets.items():
-            print(self.jump_pointer_addresses)
             self.result[address:address+2] = self.jump_pointer_addresses[name].to_bytes(2, "little")
     
     def assemble(self):
