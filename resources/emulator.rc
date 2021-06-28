@@ -1,0 +1,24 @@
+id ICON "favicon.ico"
+1 VERSIONINFO
+FILEVERSION     1,0,1,0
+PRODUCTVERSION  1,0,1,0
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "080904E4"
+    BEGIN
+      VALUE "CompanyName", "Conqu3red & AGLT"
+      VALUE "FileDescription", "8-bit CPU emulator"
+      VALUE "FileVersion", "0.1.0"
+      VALUE "InternalName", "jalcore1"
+      VALUE "LegalCopyright", "GNU GPL 2021 AGLT & Conqu3red"
+      VALUE "OriginalFilename", "jalcore.exe"
+      VALUE "ProductName", "jalcore-v0.1.0"
+      VALUE "ProductVersion", "0.1.0"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x809, 1252
+  END
+END

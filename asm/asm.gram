@@ -1,0 +1,19 @@
+program  : p=block { p };
+
+block  :  stmts=statement* { Block(stmts) };
+
+statement
+    :  i=ID COLON { JumpPoint(i.value) };
+    :  opcode=INSTRUCTION params=params { Instruction(opcode.value, params) };
+    :  name=ID params=params { MacroCall(name.value, params) };
+    :  MACRO name=ID params=params COLON block=block ENDMACRO { MacroDefinition(name.value, params, block) };
+
+params  :  p=(factor (COMMA factor)*)? { process_params(p) };
+
+factor
+    :  LS_PAREN i=factor RS_PAREN { Address(i) };
+    :  i=ID !COLON { Register(i.value.lower()) if i.value.lower() in REGISTERS else JumpPointer(i.value) };
+    :  i=MACRO_PARAM type_constraints=(LPAREN ID (COMMA ID)* RPAREN)? { construct_macro_param(i.value, type_constraints) };
+    :  i=num { i };
+
+num  :  i= INT | HEX | BIN { Number(i.value) };

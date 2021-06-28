@@ -1,0 +1,3 @@
+MACRO halt:
+    or %00010000, s0
+ENDMACRO
