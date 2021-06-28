@@ -684,7 +684,7 @@ class Emulator {
 	            std::chrono::duration<double> frame_elapsed = end - start;
                 double elapsedMS = frame_elapsed.count() * 1000;
 	            // Cap to FPS in RF register
-	            SDL_Delay(std::max(0.0, (1000 / rate) - elapsedMS));
+	            SDL_Delay(std::max(0.0, floor((1000 / rate) - elapsedMS)));
                 
             }
             std::chrono::duration<double> exec_time = std::chrono::high_resolution_clock::now() - exec_start;
