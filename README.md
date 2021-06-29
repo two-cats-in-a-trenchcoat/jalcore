@@ -16,7 +16,7 @@ This is also possible with visual C++, but requires special setup and manually c
 3. Run the makefile with `make` or `cmake`
 4. The make options are `emulator`, `standalone-release`, `compatest`, and `standalone-compatest`
 
-There are no standalone releases for linux, due to the fact that neither of us have the capabilities to compile on linux, although with the current state of Windows 11 that might change soon. WINE or virtualisation only, sorry!
+There are no standalone releases for linux, due to the fact that neither of us have the capabilities to compile on linux, although with the current state of Windows 11 that might change soon. Either build from source or use WINE or virtualisation only, sorry!
 
 # Mac
 We don't know. Sorry!
