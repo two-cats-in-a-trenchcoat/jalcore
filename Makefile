@@ -16,7 +16,7 @@ emulator: $(SRC)
 	
 standalone-release: $(SRC)
 	@echo The standalone release still requires a full install of g++ with native SDL2 to compile.
-	@echo This is only for sharing relases, not for compiling on insufficient systems.
+	@echo This is only for sharing relases, not for compiling on unsupported system configurations.
 	$ tar -xf libs.zip
 	$(CC) $(BFLAGS) $(SRC) -o $(TARGET) $(CFLAGS)
 	@echo $(TARGET) Succesfully installed.
@@ -29,7 +29,7 @@ compatest: $(SRC2)
 	
 standalone-compatest: $(SRC2)
 	@echo The standalone release still requires a full install of g++ with native SDL2 to compile.
-	@echo This is only for sharing relases, not for compiling on insufficient systems.
+	@echo This is only for sharing relases, not for compiling on unsupported system configurations.
 	$ tar -xf libs.zip
 	$(CC) $(SRC2) -o $(TARGET2) $(CFLAGS)
 	@echo Compatablity test compiled successfully.
