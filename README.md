@@ -14,7 +14,7 @@ This is also possible with visual C++, but requires special setup and manually c
 1. Install [SDL2](https://wiki.libsdl.org/Installation)
 2. Navigate to your jalcore install folder.
 3. Run the makefile with `make` or `cmake`
-4. The make options are `emulator`, `standalone-release`, `compatest`, and `standalone-compatest`
+4. The make options are `emulator`, `standalone-release`(deprecated), `compatest`, and `standalone-compatest`(deprecated)
 
 There are no standalone releases for linux, due to the fact that neither of us have the capabilities to compile on linux, although with the current state of Windows 11 that might change soon. Either build from source or use WINE or virtualisation only, sorry!
 
