@@ -12,6 +12,7 @@ fill:
         cmp $C000, ix
         jmp %10000000, drawer
     mov $C000, ix
+    rdw
     ret
 
 

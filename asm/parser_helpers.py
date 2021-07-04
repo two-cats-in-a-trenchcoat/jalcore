@@ -119,7 +119,6 @@ REGISTERS = [
     "md",
     "mx",
     "mv",
-    "rf",
 ]
 
 INSTRUCTIONS = [
@@ -144,4 +143,5 @@ INSTRUCTIONS = [
     "nop",
     "mov",
     "ret",
+    "rdw",
 ]

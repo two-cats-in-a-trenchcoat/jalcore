@@ -1,5 +1,4 @@
 mov $C002, ix
-mov 60, rf  ;  set framerate
 
 blank:
     mov $FF, [ix]  ;  set pixel
@@ -9,6 +8,7 @@ blank:
     jmp %10000000, blank
 
 ; reset
+rdw
 mov $C000, ix
 mov 2, r0
 iter:
@@ -24,7 +24,7 @@ iter:
         cmp $C000, ix
         jmp %10000000, clearfactors
 
-
+    rdw
     add 1, r0
     cmp 0, r0
     jmp %10000001, iter

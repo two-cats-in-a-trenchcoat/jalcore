@@ -20,3 +20,4 @@
 "NOP","$12",,
 "MOV","$13","<src>(CV, 8R, 16R, Mx) <tar>(8R, 16R, Mx) <src-aop> <tar-aop>","Move (copy) src to tar"
 "RET","$14",,
+"RDW","$15",,

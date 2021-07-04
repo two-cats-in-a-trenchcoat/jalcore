@@ -1,5 +1,4 @@
 mov $C000, ix
-mov 60, rf  ;  set framerate
 
 drawer:
     mov r0, [ix]  ;  set pixel
@@ -9,6 +8,7 @@ drawer:
     cmp $C000, ix
     jmp %10000000, drawer
 
+rdw
 ; reset
 mov $C000, ix
 mov 0, r0

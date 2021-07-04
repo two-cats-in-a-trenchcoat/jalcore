@@ -14,9 +14,11 @@
 "IX","$0C","16-bit","Index Register",
 "-","$0D",,,
 "-","$0E",,,
-"CV8","$0F",,"Constant Value (8 bit)","Virtual"
-"CV16","$10",,"Constant Value (16 bit)","Virtual"
+"u8","$0F",,"Constant Value (8 bit)","Virtual"
+"u16","$10",,"Constant Value (16 bit)","Virtual"
 "MD","$11",,"Memory Direct","Virtual"
 "MX","$12",,"Memory Indexed","Virtual"
-"MV","$13",,"Memory Address at value","Virtual"
-"RF","$14","16-bit","Target display framerate","Default 60"
+"-","$13",,"-","Virtual"
+,,,,
+,,,,
+,,,,

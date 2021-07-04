@@ -6,18 +6,16 @@
 #include <chrono>
 #include <thread>
 #include <cmath>
+
 #define SDL_MAIN_HANDLED
 #include <SDL2/SDL.h>
 #define SCALE 4
 #define WINDOW_WIDTH 128
 
+#include "emulator.h"
+
 //#define DEBUG
 //#define PERF_LOG
-
-// Set nth bit of target to value
-#define BIT_SET(target, n, value) (target = (target & ~(1ULL << n)) | (value << n))
-// check if nth bit of target is set
-#define BIT_CHECK(target, n) ((target >> n) & 1ULL)
 
 char const hex[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
 
@@ -28,7 +26,7 @@ std::string getHex(char c){
     return r;
 }
 
-std::string dumpMem(unsigned char *memory, unsigned size){
+std::string dumpMem(uint8_t *memory, unsigned size){
     std::string r = "";
     for (unsigned i = 0; i < size; i++){
         const char ch = memory[i];
@@ -37,706 +35,684 @@ std::string dumpMem(unsigned char *memory, unsigned size){
     return r;
 }
 
-struct Operand {
-    unsigned value;
-    unsigned target;
-    std::string type;
-};
 
-struct Registers {
-    unsigned char R0 = 0;
-    unsigned char R1 = 0;
-    unsigned char R2 = 0;
-    unsigned char R3 = 0;
-    unsigned char R4 = 0;
-    unsigned char R5 = 0;
-    unsigned char R6 = 0;
-    unsigned char R7 = 0;
-    unsigned char S0 = 0b10000000;
-    unsigned char S1 = 0;
-    /*
-        Flags in S0 (MSB to LSB)
-        1   Hardwired 1
-        0	Hardwired 0
-        -	
-        H	Halt
-        -	
-        N	Negative *not implemented
-        Z	Zero
-        C	Carry
+const uint8_t PC = 0x0A;
+const uint8_t CV8 = 0x0F;
+const uint8_t CV16 = 0x10;
+const uint8_t MD = 0x11;
+const uint8_t MX = 0x12;
+const uint8_t MV = 0x13;
 
-        Flags in S1 (MSB to LSB)
-        -
-        -
-        -
-        -
-        -
-        -
-        -
-        -
+JalcoreCPU::JalcoreCPU(){}
 
-    */
-    unsigned short PC = 0;
-    unsigned short SP = 0;
-    unsigned short IX = 0;
-    unsigned short RF = 60; 
-    // CV, MD, MX
-};
+JalcoreCPU::~JalcoreCPU(){}
 
-const unsigned char PC = 0x0A;
-const unsigned char CV8 = 0x0F;
-const unsigned char CV16 = 0x10;
-const unsigned char MD = 0x11;
-const unsigned char MX = 0x12;
-const unsigned char MV = 0x13;
+void JalcoreCPU::ConnectBus(Bus *b){
+    bus = b;
+}
 
-struct State {
-    Registers registers;
-    unsigned char *memory;
-    unsigned size;
-};
+void JalcoreCPU::write(uint16_t addr, uint8_t data){
+    bus->write(addr, data);
+}
+uint8_t JalcoreCPU::read(uint16_t addr){
+    return bus->read(addr);
+}
 
-class Emulator {
-    public:
-        State state;
-        bool isRunning = false;
-        double cycle_total;
-        int cycle_counter;
+uint8_t JalcoreCPU::read_byte(){
+    uint8_t byte = read(registers.PC);
+    registers.PC += 1;
+    return byte;
+}
+
+unsigned JalcoreCPU::offset_address(uint8_t type, unsigned address){
+    if (type == MX) return registers.IX + address;
+    return address;
+}
+
+unsigned JalcoreCPU::read_number(unsigned numBytes){
+    uint8_t b1 = read_byte();
+    uint8_t b2 = read_byte();
+    unsigned result = (b2 << 8) + (b1);
+    //printf("%s %s -> %d\n", getHex(b1).c_str(), getHex(b2).c_str(), result);
+    return result;
+}
+
+bool JalcoreCPU::is_2byte_register(uint8_t type){
+    return (type >= 0x0A && type <= 0x0E) or type == 0x14;
+}
+
+void JalcoreCPU::get_types(unsigned amount, uint8_t* result){
+    for (unsigned i = 0; i < amount; i++){
+        result[i] = read_byte();
+    }
+}
+
+unsigned JalcoreCPU::loadRegister(uint8_t type){
+    switch (type){
+        case 0x00: // R0
+            return registers.R0;
+        case 0x01: // R1
+            return registers.R1;
+        case 0x02: // R2
+            return registers.R2;
+        case 0x03: // R3
+            return registers.R3;
+        case 0x04: // R4
+            return registers.R4;
+        case 0x05: // R5
+            return registers.R5;
+        case 0x06: // R6
+            return registers.R6;
+        case 0x07: // R7
+            return registers.R7;
         
-        Emulator(State _state){
-            state = _state;
-        }
+        case 0x08: // S0
+            return registers.S0;
+        case 0x09: // S1
+            return registers.S1;
         
-        unsigned char read_byte(){
-            unsigned char byte = state.memory[state.registers.PC];
-            state.registers.PC += 1;
-            return byte;
-        }
+        case 0x0A: // PC
+            return registers.PC;
+        case 0x0B: // SP
+            return registers.SP;
+        case 0x0C: // IX
+            return registers.IX;
+    }
+    printf("Invalid type %d\n", type);
+    return 0;
+}
 
-        unsigned offset_address(unsigned char type, unsigned address){
-            if (type == MX) return state.registers.IX + address;
-            return address;
-        }
+void JalcoreCPU::setRegister(uint8_t type, unsigned value){
+    switch (type){
+        case 0x00: // R0
+            registers.R0 = value;
+            break;
+        case 0x01: // R1
+            registers.R1 = value;
+            break;
+        case 0x02: // R2
+            registers.R2 = value;
+            break;
+        case 0x03: // R3
+            registers.R3 = value;
+            break;
+        case 0x04: // R4
+            registers.R4 = value;
+            break;
+        case 0x05: // R5
+            registers.R5 = value;
+            break;
+        case 0x06: // R6
+            registers.R6 = value;
+            break;
+        case 0x07: // R7
+            registers.R7 = value;
+            break;
+        
+        case 0x08: // S0
+            registers.S0 = value;
+            BIT_SET(registers.S0, 7, 1); // hardwired 1
+            BIT_SET(registers.S0, 6, 0); // hardwired 0
+            break;
+        case 0x09: // S1
+            registers.S1 = value;
+            break;
+        
+        case 0x0A: // PC
+            registers.PC = value;
+            break;
+        case 0x0B: // SP
+            registers.SP = value;
+            break;
+        case 0x0C: // IX
+            registers.IX = value;
+            break;
+    }
+}
 
-        unsigned read_number(unsigned numBytes){
-            unsigned char b1 = read_byte();
-            unsigned char b2 = read_byte();
-            unsigned result = (b2 << 8) + (b1);
-            //printf("%s %s -> %d\n", getHex(b1).c_str(), getHex(b2).c_str(), result);
-            return result;
-        }
+Operand JalcoreCPU::get_aop(uint8_t type){
+    if (type == MD || type == MX){ // Memory Index
+        unsigned addr = offset_address(type, read_number(2));
+        unsigned value = read(addr);
+        return Operand {value, addr, "Mx"};
+    }
+    else if (type == MV){
+        uint8_t _type = read_byte();
+        Operand addr = get_aop(_type);
+        addr.type = "Mx";
+        addr.target = addr.value;
+        return addr;
+    }
+    else if (type == CV8) return Operand {read_byte(), 0, "CV8"}; // 8 bit Constant
+    else if (type == CV16) return Operand {read_number(2), 0, "CV16"}; // 16 bit Constant
+    
+    return Operand {loadRegister(type), type, "REG"};
+}
 
-        bool is_2byte_register(unsigned char type){
-            return (type >= 0x0A && type <= 0x0E) or type == 0x14;
-        }
+void JalcoreCPU::get_params(unsigned amount, Operand *result){
+    uint8_t types[amount];
+    get_types(amount, types);
+    for (unsigned i = 0; i < amount; i++){
+        //printf("%d\n", i);
+        Operand p = get_aop(types[i]);
+        result[i] = p;
+    }
+}
 
-        void get_types(unsigned amount, unsigned char* result){
-            for (unsigned i = 0; i < amount; i++){
-                result[i] = read_byte();
-            }
-        }
+void JalcoreCPU::store(Operand operand, unsigned value){
+    if (operand.type == "Mx"){
+        write(operand.target, value);
+    }
+    else if (operand.type == "REG"){
+        setRegister(operand.target, value);
+    }
+}
 
-        unsigned loadRegister(unsigned char type){
-            switch (type){
-                case 0x00: // R0
-                    return state.registers.R0;
-                case 0x01: // R1
-                    return state.registers.R1;
-                case 0x02: // R2
-                    return state.registers.R2;
-                case 0x03: // R3
-                    return state.registers.R3;
-                case 0x04: // R4
-                    return state.registers.R4;
-                case 0x05: // R5
-                    return state.registers.R5;
-                case 0x06: // R6
-                    return state.registers.R6;
-                case 0x07: // R7
-                    return state.registers.R7;
-                
-                case 0x08: // S0
-                    return state.registers.S0;
-                case 0x09: // S1
-                    return state.registers.S1;
-                
-                case 0x0A: // PC
-                    return state.registers.PC;
-                case 0x0B: // SP
-                    return state.registers.SP;
-                case 0x0C: // IX
-                    return state.registers.IX;
-                case 0x14:
-                    return state.registers.RF;
-            }
-            printf("Invalid type %d\n", type);
-            return 0;
-        }
+bool JalcoreCPU::getFlag(std::string target, unsigned bit){
+    if (target == "S0") return BIT_CHECK(registers.S0, bit);
+    if (target == "S1") return BIT_CHECK(registers.S1, bit);
+}
 
-        void setRegister(unsigned char type, unsigned value){
-            switch (type){
-                case 0x00: // R0
-                    state.registers.R0 = value;
-                    break;
-                case 0x01: // R1
-                    state.registers.R1 = value;
-                    break;
-                case 0x02: // R2
-                    state.registers.R2 = value;
-                    break;
-                case 0x03: // R3
-                    state.registers.R3 = value;
-                    break;
-                case 0x04: // R4
-                    state.registers.R4 = value;
-                    break;
-                case 0x05: // R5
-                    state.registers.R5 = value;
-                    break;
-                case 0x06: // R6
-                    state.registers.R6 = value;
-                    break;
-                case 0x07: // R7
-                    state.registers.R7 = value;
-                    break;
-                
-                case 0x08: // S0
-                    state.registers.S0 = value;
-                    BIT_SET(state.registers.S0, 7, 1); // hardwired 1
-                    BIT_SET(state.registers.S0, 6, 0); // hardwired 0
-                    break;
-                case 0x09: // S1
-                    state.registers.S1 = value;
-                    break;
-                
-                case 0x0A: // PC
-                    state.registers.PC = value;
-                    break;
-                case 0x0B: // SP
-                    state.registers.SP = value;
-                    break;
-                case 0x0C: // IX
-                    state.registers.IX = value;
-                    break;
-                case 0x14:
-                    state.registers.RF = value;
-                    break;
-            }
-        }
+void JalcoreCPU::setFlag(std::string target, unsigned bit, bool value){
+    if (target == "S0") BIT_SET(registers.S0, bit, value);
+    if (target == "S1") BIT_SET(registers.S1, bit, value);
+}
 
-        Operand get_aop(unsigned char type){
-            if (type == MD || type == MX){ // Memory Index
-                unsigned addr = offset_address(type, read_number(2));
-                unsigned value = state.memory[addr];
-                return Operand {value, addr, "Mx"};
-            }
-            else if (type == MV){
-                unsigned char _type = read_byte();
-                Operand addr = get_aop(_type);
-                addr.type = "Mx";
-                addr.target = addr.value;
-                return addr;
-            }
-            else if (type == CV8) return Operand {read_byte(), 0, "CV8"}; // 8 bit Constant
-            else if (type == CV16) return Operand {read_number(2), 0, "CV16"}; // 16 bit Constant
+// Instruction definitions
+
+void JalcoreCPU::op_inc(){
+    // inc <tar>(8R, 16R, Mx)
+    Operand params[1];
+    get_params(1, params);
+    Operand tar = params[0];
+    unsigned result = tar.value + 1;
+    store(tar, result);
+    setFlag("S0", 1, result == 0); // zero flag
+}
+
+void JalcoreCPU::op_dec(){
+    // dec <tar>(8R, 16R, Mx)
+    Operand params[1];
+    get_params(1, params);
+    Operand tar = params[0];
+    unsigned result = tar.value - 1;
+    store(tar, result);
+    setFlag("S0", 1, result == 0); // zero flag
+}
+
+void JalcoreCPU::op_add(){
+    // add <src>(CV, 8R, Mx) <tar>(8R, Mx)
+    Operand params[2];
+    get_params(2, params);
+    Operand src = params[0];
+    Operand tar = params[1];
+    unsigned result = src.value + tar.value;
+    store(tar, result);
+    setFlag("S0", 0, result > 0xFF);
+    setFlag("S0", 1, result == 0); // zero flag
+}
+
+void JalcoreCPU::op_addc(){
+    // addc <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
+    Operand params[2];
+    get_params(2, params);
+    Operand src = params[0];
+    Operand tar = params[1];
+    unsigned result = src.value + tar.value + getFlag("S0", 0);
+    store(tar, result);
+    setFlag("S0", 0, result > 0xFF);
+    setFlag("S0", 1, result == 0); // zero flag
+}
+
+void JalcoreCPU::op_sub(){
+    // sub <src>(CV, 8R, Mx) <tar>(8R, Mx)
+    Operand params[2];
+    get_params(2, params);
+    Operand src = params[0];
+    Operand tar = params[1];
+    unsigned result = tar.value - src.value;
+    store(tar, result);
+    setFlag("S0", 0, src.value > tar.value);
+    setFlag("S0", 1, result == 0); // zero flag
+}
+
+void JalcoreCPU::op_subb(){
+    // subb <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
+    Operand params[2];
+    get_params(2, params);
+    Operand src = params[0];
+    Operand tar = params[1];
+    unsigned result = tar.value - (src.value + getFlag("S0", 0));
+    store(tar, result);
+    setFlag("S0", 0, (src.value + getFlag("S0", 0)) > tar.value);
+    setFlag("S0", 1, result == 0); // zero flag
+}
+
+void JalcoreCPU::op_rol(){
+    // rol <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
+    // (rotate left)
+    Operand params[2];
+    get_params(2, params);
+    Operand src = params[0];
+    Operand tar = params[1];
+    unsigned result = src.value;
+    bool carry;
+    if (src.type == "CV8"){
+        carry = result >> 7;
+        result  = (result << 1) | carry;
+    }
+    else {
+        carry = result >> 15;
+        result  = (result << 1) | carry;
+    }
+    store(tar, result);
+    setFlag("S0", 1, result == 0); // zero flag
+    setFlag("S0", 0, carry); // carry bit
+}
+
+void JalcoreCPU::op_rolc(){
+    // rolc <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
+    // (rotate left through carry)
+    Operand params[2];
+    get_params(2, params);
+    Operand src = params[0];
+    Operand tar = params[1];
+    unsigned result = src.value;
+    bool oldcarry = getFlag("S0", 1);
+    bool carry;
+    if (src.type == "CV8"){
+        carry = result >> 7;
+        result  = (result << 1) | oldcarry;
+    }
+    else {
+        carry = result >> 15;
+        result  = (result << 1) | oldcarry;
+    }
+    store(tar, result);
+    setFlag("S0", 1, result == 0); // zero flag
+    setFlag("S0", 0, carry); // carry bit
+}
+
+void JalcoreCPU::op_ror(){
+    // ror <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
+    // (rotate right)
+    Operand params[2];
+    get_params(2, params);
+    Operand src = params[0];
+    Operand tar = params[1];
+    unsigned result = src.value;
+    bool carry;
+    if (src.type == "CV8"){
+        carry = result & 1;
+        result  = (result >> 1) | (carry << 7);
+    }
+    else {
+        carry = result & 1;
+        result  = (result >> 1) | (carry << 15);
+    }
+    store(tar, result);
+    setFlag("S0", 1, result == 0); // zero flag
+    setFlag("S0", 0, carry); // carry bit
+}
+
+void JalcoreCPU::op_rorc(){
+    // rorc <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
+    // (rotate right through carry)
+    Operand params[2];
+    get_params(2, params);
+    Operand src = params[0];
+    Operand tar = params[1];
+    unsigned result = src.value;
+    bool oldcarry = getFlag("S0", 1);
+    bool carry;
+    if (src.type == "CV8"){
+        carry = result & 1;
+        result  = (result << 1) | (oldcarry << 7);
+    }
+    else {
+        carry = result & 1;
+        result  = (result << 1) | (oldcarry << 15);
+    }
+    store(tar, result);
+    setFlag("S0", 1, result == 0); // zero flag
+    setFlag("S0", 0, carry); // carry bit
+}
+
+void JalcoreCPU::op_and(){
+    // and <src>(CV, 8R, Mx) <tar>(8R, Mx)
+    Operand params[2];
+    get_params(2, params);
+    Operand src = params[0];
+    Operand tar = params[1];
+    unsigned result = src.value & tar.value;
+    store(tar, result);
+    setFlag("S0", 1, result == 0); // zero flag
+}
+
+void JalcoreCPU::op_or(){
+    // or <src>(CV, 8R, Mx) <tar>(8R, Mx)
+    Operand params[2];
+    get_params(2, params);
+    Operand src = params[0];
+    Operand tar = params[1];
+    unsigned result = src.value | tar.value;
+    store(tar, result);
+    setFlag("S0", 1, result == 0); // zero flag
+}
+
+void JalcoreCPU::op_xor(){
+    // xor <src>(CV, 8R, Mx) <tar>(8R, Mx)
+    Operand params[2];
+    get_params(2, params);
+    Operand src = params[0];
+    Operand tar = params[1];
+    unsigned result = src.value ^ tar.value;
+    store(tar, result);
+    setFlag("S0", 1, result == 0); // zero flag
+}
+
+void JalcoreCPU::op_cmp(){
+    // cmp <src1>(CV, 8R, 16R, Mx) <src2>(CV, 8R, 16R, Mx) <src1-aop> <src2-aop>
+    Operand params[2];
+    get_params(2, params);
+    Operand src1 = params[0];
+    Operand src2 = params[1];
+    setFlag("S0", 0, src1.value > src2.value); // carry flag
+    setFlag("S0", 1, src1.value == src2.value); // zero flag
+}
+
+void JalcoreCPU::op_push(){
+    // push <src>(CV, 8R, 16R, Mx)
+    Operand params[1];
+    get_params(1, params);
+    Operand src = params[0];
+    registers.SP++;
+    store(Operand { 0, registers.SP, "Mx" }, src.value);
+    if (src.type == "CV16" || is_2byte_register(src.target)){
+        registers.SP++;
+        store(Operand { 0, registers.SP, "Mx" }, src.value >> 8);
+    }
+}
+
+void JalcoreCPU::op_pop(){
+    // pop <tar>(8R, 16R, Mx)
+    Operand params[1];
+    get_params(1, params);
+    Operand tar = params[0];
+    unsigned result = 0;
+    result += read(registers.SP);
+    registers.SP--;
+    if (is_2byte_register(tar.target)){
+        result <<= 8;
+        result += read(registers.SP);
+        registers.SP--;
+    }
+    store(tar, result);
+}
+
+void JalcoreCPU::op_jmp(){
+    // jmp <src>(CV) <tar>(Mx) <src-aop> <tar-aop>
+    Operand params[2];
+    get_params(2, params);
+    Operand src = params[0];
+    Operand tar = params[1];
+    //printf("src: %x target: %d\n", src.value, tar.target);
+    bool flip = BIT_CHECK(src.value, 7);
+    BIT_SET(src.value, 7, 0);
+    bool flagSet;
+    if (src.value <= 7) flagSet = getFlag("S0", src.value);
+    else flagSet = getFlag("S1", src.value-7);
+    flagSet ^= flip;
+    if (flagSet) registers.PC = tar.target;
+}
+
+void JalcoreCPU::op_jsr(){
+    // jsr <src>(CV) <tar>(Mx) <src-aop> <tar-aop>
+    Operand params[2];
+    get_params(2, params);
+    Operand src = params[0];
+    Operand tar = params[1];
+    //printf("src: %x target: %d\n", src.value, tar.target);
+    bool flip = BIT_CHECK(src.value, 7);
+    BIT_SET(src.value, 7, 0);
+    bool flagSet;
+    if (src.value <= 7) flagSet = getFlag("S0", src.value);
+    else flagSet = getFlag("S1", src.value-7);
+    flagSet ^= flip;
+    if (flagSet){
+        // push PC to stack before jumping
+        registers.SP++;
+        write(registers.SP, registers.PC);
+        registers.SP++;
+        write(registers.SP, registers.PC >> 8);
+        registers.PC = tar.target;
+    }
+}
+
+void JalcoreCPU::op_mov(){
+    // mov <src>(CV, 8R, 16R, Mx) <tar>(8R, 16R, Mx) <src-aop> <tar-aop>
+    Operand params[2];
+    get_params(2, params);
+    Operand src = params[0];
+    Operand tar = params[1];
+    //printf("new val: %d address: %#x  - ", src.value, tar.target);
+    store(tar, src.value);
+}
+
+void JalcoreCPU::op_ret(){
+    unsigned result = 0;
+    result += read(registers.SP);
+    registers.SP--;
+    result <<= 8;
+    result += read(registers.SP);
+    registers.SP--;
+    registers.PC = result;
+}
+
+void JalcoreCPU::op_rdw(){
+    // Tell the Picture Processing Unit to redraw the display
+    bus->ppu.Redraw();
+}
+
+// Execution loop
+
+void JalcoreCPU::execute(){
+    while (bus->isRunning){
+        auto cycle_start = std::chrono::high_resolution_clock::now();
+        uint8_t opcode = read_byte();
+        #ifdef DEBUG
+        printf("Opcode: %s\n", getHex(opcode).c_str());
+        #endif
+        switch (opcode){
+            case 0x00: op_inc(); break;
+            case 0x01: op_dec(); break;
+            case 0x02: op_add(); break;
+            case 0x03: op_addc(); break;
+            case 0x04: op_sub(); break;
+            case 0x05: op_subb(); break;
+            case 0x06: op_rol(); break;
+            case 0x07: op_rolc(); break;
+            case 0x08: op_ror(); break;
+            case 0x09: op_rorc(); break;
+            case 0x0A: op_and(); break;
+            case 0x0B: op_or(); break;
+            case 0x0C: op_xor(); break;
+            case 0x0D: op_cmp(); break;
+            case 0x0E: op_push(); break;
+            case 0x0F: op_pop(); break;
+            case 0x10: op_jmp(); break;
+            case 0x11: op_jsr(); break;
+            case 0x12: break; // nop
+            case 0x13: op_mov(); break;
+            case 0x14: op_ret(); break;
+            case 0x15: op_rdw(); break;
+            // TODO: implement bit shifting instructions and other logic ops
+            default:
+                printf("Unexpected opcode %#x, PC: %d", opcode, registers.PC);
+                exit(1);
+        }
+        auto cycle_end = std::chrono::high_resolution_clock::now();
+        cycle_counter += 1;
+        std::chrono::duration<double> cycle_time = cycle_end - cycle_start;
+        cycle_total += cycle_time.count();
+
+        // halt check
+        if (getFlag("S0", 4)){
+            printf("Halted\n");
+            //printf(memory.hex())
+            bus->isRunning = false;
+        }
+    }
+}
+
+JalcorePPU::JalcorePPU(){}
+
+JalcorePPU::~JalcorePPU(){}
+
+void JalcorePPU::ConnectBus(Bus *b){
+    bus = b;
+    vram = bus->ram + vram_offset;
+}
+
+std::chrono::duration<double> JalcorePPU::UpdateDisplay(){
+    if (!bus->isRunning) return std::chrono::duration<double>{0};
+    
+    SDL_UpdateTexture(texture, NULL, pixels, WINDOW_WIDTH * sizeof(Uint32));
+    auto start = std::chrono::high_resolution_clock::now();
+    const int startAddr = 0x0000;
+    uint8_t value;
+    unsigned pos;
+    uint8_t r, g, b;
+
+    for (short y = 0; y < WINDOW_WIDTH; y++){
+        for (short x = 0; x < WINDOW_WIDTH; x++){
+            pos = ((128 * y) + x);
+            value = vram[startAddr + pos];
             
-            return Operand {loadRegister(type), type, "REG"};
+            r = ((value >> 5) / 7.0) * 255;
+            g = (((value >> 2) & 0b111) / 7.0) * 255;
+            b = ((value & 0b11) / 3.0) * 255;
+
+            pixels[pos] = (r << 16) + (b << 8) + g;
+
         }
+    }
+    SDL_RenderCopy(renderer, texture, NULL, NULL);
+    SDL_RenderPresent(renderer);
+    auto finish = std::chrono::high_resolution_clock::now();
+    return finish - start;
+}
 
-        void get_params(unsigned amount, Operand *result){
-            unsigned char types[amount];
-            get_types(amount, types);
-            for (unsigned i = 0; i < amount; i++){
-                //printf("%d\n", i);
-                Operand p = get_aop(types[i]);
-                result[i] = p;
-            }
+void JalcorePPU::Redraw(){
+    #ifdef DEBUG
+    printf("Redraw... ");
+    #endif
+    
+    auto elapsed = UpdateDisplay();
+    redraw_total += elapsed.count();
+    redraw_count += 1;
+    #ifdef PERF_LOG
+    std::cout << "Average Display Update Time: " << redraw_total/redraw_count << " s\n";
+    #endif
+    
+    #ifdef DEBUG
+    printf("Redraw complete\n");
+    #endif
+}
+
+void JalcorePPU::SDL_eventloop(){
+    // initialise window
+    SDL_Init(SDL_INIT_VIDEO);
+    SDL_CreateWindowAndRenderer(WINDOW_WIDTH*SCALE, WINDOW_WIDTH*SCALE, 0, &window, &renderer);
+    SDL_RenderSetScale(renderer, SCALE, SCALE);
+    texture = SDL_CreateTexture(
+        renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, WINDOW_WIDTH, WINDOW_WIDTH
+    );
+    memset(pixels, 0, WINDOW_WIDTH * WINDOW_WIDTH * sizeof(Uint32));
+    
+    while (bus->isRunning){
+        auto start = std::chrono::high_resolution_clock::now();
+        while (SDL_PollEvent(&event)){
+            if (event.type == SDL_QUIT) bus->isRunning = false;
         }
+    }
 
-        void store(Operand operand, unsigned value){
-            if (operand.type == "Mx"){
-                state.memory[operand.target] = value;
-            }
-            else if (operand.type == "REG"){
-                setRegister(operand.target, value);
-            }
-        }
+    // teardown work
+    SDL_DestroyTexture(texture);
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    SDL_Quit();
+}
 
-        bool getFlag(std::string target, unsigned bit){
-            if (target == "S0") return BIT_CHECK(state.registers.S0, bit);
-            if (target == "S1") return BIT_CHECK(state.registers.S1, bit);
-        }
+Bus::Bus(){
+    cpu.ConnectBus(this);
+    ppu.ConnectBus(this);
+}
 
-        void setFlag(std::string target, unsigned bit, bool value){
-            if (target == "S0") BIT_SET(state.registers.S0, bit, value);
-            if (target == "S1") BIT_SET(state.registers.S1, bit, value);
-        }
+Bus::~Bus(){}
 
-        // Instruction definitions
+void Bus::write(uint16_t addr, uint8_t data){
+    ram[addr] = data;
+}
 
-        void op_inc(){
-            // inc <tar>(8R, 16R, Mx)
-            Operand params[1];
-            get_params(1, params);
-            Operand tar = params[0];
-            unsigned result = tar.value + 1;
-            store(tar, result);
-            setFlag("S0", 1, result == 0); // zero flag
-        }
+uint8_t Bus::read(uint16_t addr){
+    return ram[addr];
+}
 
-        void op_dec(){
-            // dec <tar>(8R, 16R, Mx)
-            Operand params[1];
-            get_params(1, params);
-            Operand tar = params[0];
-            unsigned result = tar.value - 1;
-            store(tar, result);
-            setFlag("S0", 1, result == 0); // zero flag
-        }
+void Bus::loadRom(FILE* rom){
+    fseek(rom, 0, SEEK_END);
+    long size = ftell(rom);
+    fseek(rom, 0, SEEK_SET);
+    if (size > ramSize){
+        size = ramSize;
+        printf("Rom cut off from %d to %d", size, ramSize);
+    }
+    fread(ram, sizeof(uint8_t), size, rom);
+}
 
-        void op_add(){
-            // add <src>(CV, 8R, Mx) <tar>(8R, Mx)
-            Operand params[2];
-            get_params(2, params);
-            Operand src = params[0];
-            Operand tar = params[1];
-            unsigned result = src.value + tar.value;
-            store(tar, result);
-            setFlag("S0", 0, result > 0xFF);
-            setFlag("S0", 1, result == 0); // zero flag
-        }
-
-        void op_addc(){
-            // addc <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
-            Operand params[2];
-            get_params(2, params);
-            Operand src = params[0];
-            Operand tar = params[1];
-            unsigned result = src.value + tar.value + getFlag("S0", 0);
-            store(tar, result);
-            setFlag("S0", 0, result > 0xFF);
-            setFlag("S0", 1, result == 0); // zero flag
-        }
-
-        void op_sub(){
-            // sub <src>(CV, 8R, Mx) <tar>(8R, Mx)
-            Operand params[2];
-            get_params(2, params);
-            Operand src = params[0];
-            Operand tar = params[1];
-            unsigned result = tar.value - src.value;
-            store(tar, result);
-            setFlag("S0", 0, src.value > tar.value);
-            setFlag("S0", 1, result == 0); // zero flag
-        }
-
-        void op_subb(){
-            // subb <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
-            Operand params[2];
-            get_params(2, params);
-            Operand src = params[0];
-            Operand tar = params[1];
-            unsigned result = tar.value - (src.value + getFlag("S0", 0));
-            store(tar, result);
-            setFlag("S0", 0, (src.value + getFlag("S0", 0)) > tar.value);
-            setFlag("S0", 1, result == 0); // zero flag
-        }
-
-        void op_rol(){
-            // rol <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
-            // (rotate left)
-            Operand params[2];
-            get_params(2, params);
-            Operand src = params[0];
-            Operand tar = params[1];
-            unsigned result = src.value;
-            bool carry;
-            if (src.type == "CV8"){
-                carry = result >> 7;
-                result  = (result << 1) | carry;
-            }
-            else {
-                carry = result >> 15;
-                result  = (result << 1) | carry;
-            }
-            store(tar, result);
-            setFlag("S0", 1, result == 0); // zero flag
-            setFlag("S0", 0, carry); // carry bit
-        }
-
-        void op_rolc(){
-            // rolc <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
-            // (rotate left through carry)
-            Operand params[2];
-            get_params(2, params);
-            Operand src = params[0];
-            Operand tar = params[1];
-            unsigned result = src.value;
-            bool oldcarry = getFlag("S0", 1);
-            bool carry;
-            if (src.type == "CV8"){
-                carry = result >> 7;
-                result  = (result << 1) | oldcarry;
-            }
-            else {
-                carry = result >> 15;
-                result  = (result << 1) | oldcarry;
-            }
-            store(tar, result);
-            setFlag("S0", 1, result == 0); // zero flag
-            setFlag("S0", 0, carry); // carry bit
-        }
-
-        void op_ror(){
-            // ror <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
-            // (rotate right)
-            Operand params[2];
-            get_params(2, params);
-            Operand src = params[0];
-            Operand tar = params[1];
-            unsigned result = src.value;
-            bool carry;
-            if (src.type == "CV8"){
-                carry = result & 1;
-                result  = (result >> 1) | (carry << 7);
-            }
-            else {
-                carry = result & 1;
-                result  = (result >> 1) | (carry << 15);
-            }
-            store(tar, result);
-            setFlag("S0", 1, result == 0); // zero flag
-            setFlag("S0", 0, carry); // carry bit
-        }
-
-        void op_rorc(){
-            // rorc <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
-            // (rotate right through carry)
-            Operand params[2];
-            get_params(2, params);
-            Operand src = params[0];
-            Operand tar = params[1];
-            unsigned result = src.value;
-            bool oldcarry = getFlag("S0", 1);
-            bool carry;
-            if (src.type == "CV8"){
-                carry = result & 1;
-                result  = (result << 1) | (oldcarry << 7);
-            }
-            else {
-                carry = result & 1;
-                result  = (result << 1) | (oldcarry << 15);
-            }
-            store(tar, result);
-            setFlag("S0", 1, result == 0); // zero flag
-            setFlag("S0", 0, carry); // carry bit
-        }
-
-        void op_and(){
-            // and <src>(CV, 8R, Mx) <tar>(8R, Mx)
-            Operand params[2];
-            get_params(2, params);
-            Operand src = params[0];
-            Operand tar = params[1];
-            unsigned result = src.value & tar.value;
-            store(tar, result);
-            setFlag("S0", 1, result == 0); // zero flag
-        }
-
-        void op_or(){
-            // or <src>(CV, 8R, Mx) <tar>(8R, Mx)
-            Operand params[2];
-            get_params(2, params);
-            Operand src = params[0];
-            Operand tar = params[1];
-            unsigned result = src.value | tar.value;
-            store(tar, result);
-            setFlag("S0", 1, result == 0); // zero flag
-        }
-
-        void op_xor(){
-            // xor <src>(CV, 8R, Mx) <tar>(8R, Mx)
-            Operand params[2];
-            get_params(2, params);
-            Operand src = params[0];
-            Operand tar = params[1];
-            unsigned result = src.value ^ tar.value;
-            store(tar, result);
-            setFlag("S0", 1, result == 0); // zero flag
-        }
-
-        void op_cmp(){
-            // cmp <src1>(CV, 8R, 16R, Mx) <src2>(CV, 8R, 16R, Mx) <src1-aop> <src2-aop>
-            Operand params[2];
-            get_params(2, params);
-            Operand src1 = params[0];
-            Operand src2 = params[1];
-            setFlag("S0", 0, src1.value > src2.value); // carry flag
-            setFlag("S0", 1, src1.value == src2.value); // zero flag
-        }
-
-        void op_push(){
-            // push <src>(CV, 8R, 16R, Mx)
-            Operand params[1];
-            get_params(1, params);
-            Operand src = params[0];
-            state.registers.SP++;
-            store(Operand { 0, state.registers.SP, "Mx" }, src.value);
-            if (src.type == "CV16" || is_2byte_register(src.target)){
-                state.registers.SP++;
-                store(Operand { 0, state.registers.SP, "Mx" }, src.value >> 8);
-            }
-        }
-
-        void op_pop(){
-            // pop <tar>(8R, 16R, Mx)
-            Operand params[1];
-            get_params(1, params);
-            Operand tar = params[0];
-            unsigned result = 0;
-            result += state.memory[state.registers.SP];
-            state.registers.SP--;
-            if (is_2byte_register(tar.target)){
-                result <<= 8;
-                result += state.memory[state.registers.SP];
-                state.registers.SP--;
-            }
-            store(tar, result);
-        }
-
-        void op_jmp(){
-            // jmp <src>(CV) <tar>(Mx) <src-aop> <tar-aop>
-            Operand params[2];
-            get_params(2, params);
-            Operand src = params[0];
-            Operand tar = params[1];
-            //printf("src: %x target: %d\n", src.value, tar.target);
-            bool flip = BIT_CHECK(src.value, 7);
-            BIT_SET(src.value, 7, 0);
-            bool flagSet;
-            if (src.value <= 7) flagSet = getFlag("S0", src.value);
-            else flagSet = getFlag("S1", src.value-7);
-            flagSet ^= flip;
-            if (flagSet) state.registers.PC = tar.target;
-        }
-
-        void op_jsr(){
-            // jsr <src>(CV) <tar>(Mx) <src-aop> <tar-aop>
-            Operand params[2];
-            get_params(2, params);
-            Operand src = params[0];
-            Operand tar = params[1];
-            //printf("src: %x target: %d\n", src.value, tar.target);
-            bool flip = BIT_CHECK(src.value, 7);
-            BIT_SET(src.value, 7, 0);
-            bool flagSet;
-            if (src.value <= 7) flagSet = getFlag("S0", src.value);
-            else flagSet = getFlag("S1", src.value-7);
-            flagSet ^= flip;
-            if (flagSet){
-                // push PC to stack before jumping
-                state.registers.SP++;
-                state.memory[state.registers.SP] = state.registers.PC;
-                state.registers.SP++;
-                state.memory[state.registers.SP] = state.registers.PC >> 8;
-                state.registers.PC = tar.target;
-            }
-        }
-
-        void op_mov(){
-            // mov <src>(CV, 8R, 16R, Mx) <tar>(8R, 16R, Mx) <src-aop> <tar-aop>
-            Operand params[2];
-            get_params(2, params);
-            Operand src = params[0];
-            Operand tar = params[1];
-            //printf("new val: %d address: %#x  - ", src.value, tar.target);
-            store(tar, src.value);
-        }
-
-        void op_ret(){
-            unsigned result = 0;
-            result += state.memory[state.registers.SP];
-            state.registers.SP--;
-            result <<= 8;
-            result += state.memory[state.registers.SP];
-            state.registers.SP--;
-            state.registers.PC = result;
-        }
+void Bus::Startup(){
+    isRunning = true;
+    auto exec_start = std::chrono::high_resolution_clock::now();
+    std::thread cpu_thread(JalcoreCPU::execute, &cpu);
+    ppu.SDL_eventloop();
+    cpu_thread.join();
+    std::chrono::duration<double> exec_time = std::chrono::high_resolution_clock::now() - exec_start;
 
 
-        std::chrono::duration<double> UpdateDisplay(SDL_Renderer *renderer, SDL_Texture *texture, Uint32 *pixels){
-            SDL_UpdateTexture(texture, NULL, pixels, WINDOW_WIDTH * sizeof(Uint32));
-            auto start = std::chrono::high_resolution_clock::now();
-            const int startAddr = 0xC000;
-            unsigned char value;
-            unsigned pos;
-            uint8_t r, g, b;
-
-            for (short y = 0; y < WINDOW_WIDTH; y++){
-                for (short x = 0; x < WINDOW_WIDTH; x++){
-                    pos = ((128 * y) + x);
-                    value = state.memory[startAddr + pos];
-                    
-                    r = ((value >> 5) / 7.0) * 255;
-                    g = (((value >> 2) & 0b111) / 7.0) * 255;
-                    b = ((value & 0b11) / 3.0) * 255;
-                    
-                    pixels[pos] = (r << 16) + (b << 8) + g;
-                }
-            }
-            SDL_RenderCopy(renderer, texture, NULL, NULL);
-            SDL_RenderPresent(renderer);
-            auto finish = std::chrono::high_resolution_clock::now();
-            return finish - start;
-        }
-
-        // Execution loop
-
-        void execute(){
-            std::chrono::duration<double> cycle_time;
-            while (isRunning){
-                auto cycle_start = std::chrono::high_resolution_clock::now();
-                unsigned char opcode = read_byte();
-                #ifdef DEBUG
-                printf("Opcode: %s\n", getHex(opcode).c_str());
-                #endif
-                switch (opcode){
-                    case 0x00: op_inc(); break;
-                    case 0x01: op_dec(); break;
-                    case 0x02: op_add(); break;
-                    case 0x03: op_addc(); break;
-                    case 0x04: op_sub(); break;
-                    case 0x05: op_subb(); break;
-                    case 0x06: op_rol(); break;
-                    case 0x07: op_rolc(); break;
-                    case 0x08: op_ror(); break;
-                    case 0x09: op_rorc(); break;
-                    case 0x0A: op_and(); break;
-                    case 0x0B: op_or(); break;
-                    case 0x0C: op_xor(); break;
-                    case 0x0D: op_cmp(); break;
-                    case 0x0E: op_push(); break;
-                    case 0x0F: op_pop(); break;
-                    case 0x10: op_jmp(); break;
-                    case 0x11: op_jsr(); break;
-                    case 0x12: break; // nop
-                    case 0x13: op_mov(); break;
-                    case 0x14: op_ret(); break;
-                    // TODO: implement bit shifting instructions and other logic ops
-                    default:
-                        printf("Unexpected opcode %#x, PC: %d", opcode, state.registers.PC);
-                        exit(1);
-                }
-                auto cycle_end = std::chrono::high_resolution_clock::now();
-                cycle_counter += 1;
-                cycle_time = cycle_end - cycle_start;
-                cycle_total += cycle_time.count();
-
-                // halt check
-                if (getFlag("S0", 4)){
-                    printf("Halted\n");
-                    //printf(memory.hex())
-                    isRunning = false;
-                }
-            }
-        }
-
-        void mainloop(){
-            // initialise execution thread
-            isRunning = true;
-            cycle_total = 0;
-            cycle_counter = 0;
-            std::thread exec_thread (execute, this);
-
-            // initialise window
-            SDL_Event event;
-            SDL_Renderer *renderer;
-            SDL_Window *window;
-            SDL_Init(SDL_INIT_VIDEO);
-            SDL_CreateWindowAndRenderer(WINDOW_WIDTH*SCALE, WINDOW_WIDTH*SCALE, 0, &window, &renderer);
-            SDL_RenderSetScale(renderer, SCALE, SCALE);
-            SDL_Texture *texture = SDL_CreateTexture(
-                renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, WINDOW_WIDTH, WINDOW_WIDTH
-            );
-            Uint32 * pixels = new Uint32[WINDOW_WIDTH * WINDOW_WIDTH];
-            memset(pixels, 0, WINDOW_WIDTH * WINDOW_WIDTH * sizeof(Uint32));
-            
-            double redraw_total = 0;
-            int redraw_count = 1;
-
-            auto exec_start = std::chrono::high_resolution_clock::now();
-            while (isRunning){
-                auto start = std::chrono::high_resolution_clock::now();
-                while (SDL_PollEvent(&event)){
-                    if (event.type == SDL_QUIT) isRunning = false;
-                }
-                
-                auto elapsed = UpdateDisplay(renderer, texture, pixels);
-                redraw_total += elapsed.count();
-                redraw_count += 1;
-                #ifdef PERF_LOG
-                std::cout << "Average Display Update Time: " << redraw_total/redraw_count << " s\n";
-                #endif
-
-                // enforce frame rate
-                unsigned rate = state.registers.RF;
-                auto end = std::chrono::high_resolution_clock::now();
-	            std::chrono::duration<double> frame_elapsed = end - start;
-                double elapsedMS = frame_elapsed.count() * 1000;
-	            // Cap to FPS in RF register
-	            SDL_Delay(std::max(0.0, floor((1000 / rate) - elapsedMS)));
-                
-            }
-            std::chrono::duration<double> exec_time = std::chrono::high_resolution_clock::now() - exec_start;
-            
-            std::cout << "Display Redraws: " << redraw_count << "\n";
-            std::cout << "Time spent Drawing: " << redraw_total << "s\n";
-            std::cout << "Average Display Update Time: " << (redraw_total/redraw_count)*1000 << " ms\n";
-            std::cout << "Average Framerate: " << redraw_count / exec_time.count() << "\n\n";
-            
-            std::cout << "Cycles: " << cycle_counter << "\n";
-            std::cout << "Time spent on cycles: " << cycle_total << "s\n";
-            std::cout << "Average Cycle Time: " << (cycle_total/cycle_counter)*1000 << " ms\n\n";
-            
-            
-            
-            std::cout << "Execution time: " << exec_time.count() << "s\n";
-            std::cout << "Instructions per second: " << (1 / (exec_time.count() / cycle_counter)) / 1000 / 1000 << "mhz\n";
-            exec_thread.join();
-            delete[] pixels;
-            SDL_DestroyTexture(texture);
-            SDL_DestroyRenderer(renderer);
-            SDL_DestroyWindow(window);
-            SDL_Quit();
-        }
-};
+    
+    printf("Display Redraws: %u\n", ppu.redraw_count);
+    printf("Time spent Drawing: %.3fs\n", ppu.redraw_total);
+    printf("Average Display Update Time: %.3fms\n", (ppu.redraw_total/ppu.redraw_count)*1000);
+    printf("Average Framerate: %.3f\n\n", ppu.redraw_count / exec_time.count());
+    
+    printf("Cycles: %u\n", cpu.cycle_counter);
+    printf("Time spent on cycles: %.3fs\n", cpu.cycle_total);
+    printf("Average Cycle Time: %.3fns\n", (cpu.cycle_total/cpu.cycle_counter)*1000*1000*1000);
+    printf("Instructions per second: %.3fmhz\n\n", (1 / (exec_time.count() / cpu.cycle_counter)) / 1000 / 1000);
+    
+    
+    
+    printf("Total execution time: %.3fs\n", exec_time.count());
+}
 
 
 int main(int argc, char* argv[]){
-    unsigned char memory[0xFFFF] = {};
+    Bus bus;
     if (argc >= 2){
         FILE* file = fopen(argv[1], "r+");
         if (file == NULL) {
             printf("File is null");
             return 1;
         }
-        fseek(file, 0, SEEK_END);
-        long int size = ftell(file);
-        fseek(file, 0, SEEK_SET);
-        if (size > sizeof(memory))
-        {
-            size = sizeof(memory);
-        }
-        fread(memory, sizeof(unsigned char), size, file);
+        bus.loadRom(file);
         fclose(file);
+
     }
-    State state {Registers {}, memory, 0xFFFF};
-    Emulator emu {state};
-    emu.mainloop();
+    bus.Startup();
     // dump to core.bin
     FILE* file = fopen("core.bin", "w+");
     if (file != NULL){
-        fwrite(state.memory, sizeof(unsigned char), emu.state.size, file);
+        fwrite(bus.ram, sizeof(uint8_t), 0xFFFF, file);
         fclose(file);
         printf("Memory dumped to 'core.bin'\n");
     }
