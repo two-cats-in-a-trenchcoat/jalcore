@@ -549,8 +549,11 @@ void JalcoreCPU::execute(){
             case 0x15: op_rdw(); break;
             // TODO: implement bit shifting instructions and other logic ops
             default:
-                printf("Unexpected opcode %#x, PC: %d", opcode, registers.PC);
-                exit(1);
+                printf("Unexpected opcode %#x, PC: %d\n", opcode, registers.PC);
+                printf("SP: %d\n", registers.SP);
+                printf("IX: %d\n", registers.IX);
+                bus->isRunning = false;
+                return;
         }
         auto cycle_end = std::chrono::high_resolution_clock::now();
         cycle_counter += 1;
@@ -576,9 +579,7 @@ void JalcorePPU::ConnectBus(Bus *b){
 }
 
 std::chrono::duration<double> JalcorePPU::UpdateDisplay(){
-    if (!bus->isRunning) return std::chrono::duration<double>{0};
-    
-    SDL_UpdateTexture(texture, NULL, pixels, WINDOW_WIDTH * sizeof(Uint32));
+    //if (!bus->isRunning) return std::chrono::duration<double>{0};
     auto start = std::chrono::high_resolution_clock::now();
     const int startAddr = 0x0000;
     uint8_t value;
@@ -598,6 +599,7 @@ std::chrono::duration<double> JalcorePPU::UpdateDisplay(){
 
         }
     }
+    SDL_UpdateTexture(texture, NULL, pixels, WINDOW_WIDTH * sizeof(Uint32));
     SDL_RenderCopy(renderer, texture, NULL, NULL);
     SDL_RenderPresent(renderer);
     auto finish = std::chrono::high_resolution_clock::now();
@@ -607,11 +609,13 @@ std::chrono::duration<double> JalcorePPU::UpdateDisplay(){
 void JalcorePPU::Redraw(){
     #ifdef DEBUG
     printf("Redraw... ");
+    std::cout << dumpMem(vram, 0x4000);
     #endif
     
     auto elapsed = UpdateDisplay();
     redraw_total += elapsed.count();
     redraw_count += 1;
+    
     #ifdef PERF_LOG
     std::cout << "Average Display Update Time: " << redraw_total/redraw_count << " s\n";
     #endif
@@ -712,7 +716,7 @@ int main(int argc, char* argv[]){
     // dump to core.bin
     FILE* file = fopen("core.bin", "w+");
     if (file != NULL){
-        fwrite(bus.ram, sizeof(uint8_t), 0xFFFF, file);
+        fwrite(bus.ram, sizeof(uint8_t), bus.ramSize, file);
         fclose(file);
         printf("Memory dumped to 'core.bin'\n");
     }

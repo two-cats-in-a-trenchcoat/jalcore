@@ -177,7 +177,7 @@ public:
     // Devices:
     JalcoreCPU cpu;
     JalcorePPU ppu;
-    const static uint64_t ramSize = 0xFFFF;
+    const static uint64_t ramSize = 0x10000;
     uint8_t ram[ramSize] = {};
     
 };
