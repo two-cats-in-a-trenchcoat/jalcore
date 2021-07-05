@@ -63,6 +63,11 @@ struct Registers {
     // CV, MD, MX
 };
 
+enum FlagRegister {
+    S0,
+    S1
+};
+
 class Bus;
 
 class JalcoreCPU {
@@ -100,9 +105,9 @@ public:
 
     void store(Operand operand, unsigned value);
 
-    bool getFlag(std::string target, unsigned bit);
+    bool getFlag(FlagRegister target, unsigned bit);
 
-    void setFlag(std::string target, unsigned bit, bool value);
+    void setFlag(FlagRegister target, unsigned bit, bool value);
 
     // Instruction definitions
     void op_inc();

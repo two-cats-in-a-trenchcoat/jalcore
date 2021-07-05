@@ -208,14 +208,15 @@ void JalcoreCPU::store(Operand operand, unsigned value){
     }
 }
 
-bool JalcoreCPU::getFlag(std::string target, unsigned bit){
-    if (target == "S0") return BIT_CHECK(registers.S0, bit);
-    if (target == "S1") return BIT_CHECK(registers.S1, bit);
+bool JalcoreCPU::getFlag(FlagRegister target, unsigned bit){
+    if (target == S0) return BIT_CHECK(registers.S0, bit);
+    if (target == S1) return BIT_CHECK(registers.S1, bit);
+    throw std::runtime_error("Unexpected FlagRegister target");
 }
 
-void JalcoreCPU::setFlag(std::string target, unsigned bit, bool value){
-    if (target == "S0") BIT_SET(registers.S0, bit, value);
-    if (target == "S1") BIT_SET(registers.S1, bit, value);
+void JalcoreCPU::setFlag(FlagRegister target, unsigned bit, bool value){
+    if (target == S0) BIT_SET(registers.S0, bit, value);
+    if (target == S1) BIT_SET(registers.S1, bit, value);
 }
 
 // Instruction definitions
@@ -227,7 +228,7 @@ void JalcoreCPU::op_inc(){
     Operand tar = params[0];
     unsigned result = tar.value + 1;
     store(tar, result);
-    setFlag("S0", 1, result == 0); // zero flag
+    setFlag(S0, 1, result == 0); // zero flag
 }
 
 void JalcoreCPU::op_dec(){
@@ -237,7 +238,7 @@ void JalcoreCPU::op_dec(){
     Operand tar = params[0];
     unsigned result = tar.value - 1;
     store(tar, result);
-    setFlag("S0", 1, result == 0); // zero flag
+    setFlag(S0, 1, result == 0); // zero flag
 }
 
 void JalcoreCPU::op_add(){
@@ -248,8 +249,8 @@ void JalcoreCPU::op_add(){
     Operand tar = params[1];
     unsigned result = src.value + tar.value;
     store(tar, result);
-    setFlag("S0", 0, result > 0xFF);
-    setFlag("S0", 1, result == 0); // zero flag
+    setFlag(S0, 0, result > 0xFF);
+    setFlag(S0, 1, result == 0); // zero flag
 }
 
 void JalcoreCPU::op_addc(){
@@ -258,10 +259,10 @@ void JalcoreCPU::op_addc(){
     get_params(2, params);
     Operand src = params[0];
     Operand tar = params[1];
-    unsigned result = src.value + tar.value + getFlag("S0", 0);
+    unsigned result = src.value + tar.value + getFlag(S0, 0);
     store(tar, result);
-    setFlag("S0", 0, result > 0xFF);
-    setFlag("S0", 1, result == 0); // zero flag
+    setFlag(S0, 0, result > 0xFF);
+    setFlag(S0, 1, result == 0); // zero flag
 }
 
 void JalcoreCPU::op_sub(){
@@ -272,8 +273,8 @@ void JalcoreCPU::op_sub(){
     Operand tar = params[1];
     unsigned result = tar.value - src.value;
     store(tar, result);
-    setFlag("S0", 0, src.value > tar.value);
-    setFlag("S0", 1, result == 0); // zero flag
+    setFlag(S0, 0, src.value > tar.value);
+    setFlag(S0, 1, result == 0); // zero flag
 }
 
 void JalcoreCPU::op_subb(){
@@ -282,10 +283,10 @@ void JalcoreCPU::op_subb(){
     get_params(2, params);
     Operand src = params[0];
     Operand tar = params[1];
-    unsigned result = tar.value - (src.value + getFlag("S0", 0));
+    unsigned result = tar.value - (src.value + getFlag(S0, 0));
     store(tar, result);
-    setFlag("S0", 0, (src.value + getFlag("S0", 0)) > tar.value);
-    setFlag("S0", 1, result == 0); // zero flag
+    setFlag(S0, 0, (src.value + getFlag(S0, 0)) > tar.value);
+    setFlag(S0, 1, result == 0); // zero flag
 }
 
 void JalcoreCPU::op_rol(){
@@ -306,8 +307,8 @@ void JalcoreCPU::op_rol(){
         result  = (result << 1) | carry;
     }
     store(tar, result);
-    setFlag("S0", 1, result == 0); // zero flag
-    setFlag("S0", 0, carry); // carry bit
+    setFlag(S0, 1, result == 0); // zero flag
+    setFlag(S0, 0, carry); // carry bit
 }
 
 void JalcoreCPU::op_rolc(){
@@ -318,7 +319,7 @@ void JalcoreCPU::op_rolc(){
     Operand src = params[0];
     Operand tar = params[1];
     unsigned result = src.value;
-    bool oldcarry = getFlag("S0", 1);
+    bool oldcarry = getFlag(S0, 1);
     bool carry;
     if (src.type == "CV8"){
         carry = result >> 7;
@@ -329,8 +330,8 @@ void JalcoreCPU::op_rolc(){
         result  = (result << 1) | oldcarry;
     }
     store(tar, result);
-    setFlag("S0", 1, result == 0); // zero flag
-    setFlag("S0", 0, carry); // carry bit
+    setFlag(S0, 1, result == 0); // zero flag
+    setFlag(S0, 0, carry); // carry bit
 }
 
 void JalcoreCPU::op_ror(){
@@ -351,8 +352,8 @@ void JalcoreCPU::op_ror(){
         result  = (result >> 1) | (carry << 15);
     }
     store(tar, result);
-    setFlag("S0", 1, result == 0); // zero flag
-    setFlag("S0", 0, carry); // carry bit
+    setFlag(S0, 1, result == 0); // zero flag
+    setFlag(S0, 0, carry); // carry bit
 }
 
 void JalcoreCPU::op_rorc(){
@@ -363,7 +364,7 @@ void JalcoreCPU::op_rorc(){
     Operand src = params[0];
     Operand tar = params[1];
     unsigned result = src.value;
-    bool oldcarry = getFlag("S0", 1);
+    bool oldcarry = getFlag(S0, 1);
     bool carry;
     if (src.type == "CV8"){
         carry = result & 1;
@@ -374,8 +375,8 @@ void JalcoreCPU::op_rorc(){
         result  = (result << 1) | (oldcarry << 15);
     }
     store(tar, result);
-    setFlag("S0", 1, result == 0); // zero flag
-    setFlag("S0", 0, carry); // carry bit
+    setFlag(S0, 1, result == 0); // zero flag
+    setFlag(S0, 0, carry); // carry bit
 }
 
 void JalcoreCPU::op_and(){
@@ -386,7 +387,7 @@ void JalcoreCPU::op_and(){
     Operand tar = params[1];
     unsigned result = src.value & tar.value;
     store(tar, result);
-    setFlag("S0", 1, result == 0); // zero flag
+    setFlag(S0, 1, result == 0); // zero flag
 }
 
 void JalcoreCPU::op_or(){
@@ -397,7 +398,7 @@ void JalcoreCPU::op_or(){
     Operand tar = params[1];
     unsigned result = src.value | tar.value;
     store(tar, result);
-    setFlag("S0", 1, result == 0); // zero flag
+    setFlag(S0, 1, result == 0); // zero flag
 }
 
 void JalcoreCPU::op_xor(){
@@ -408,7 +409,7 @@ void JalcoreCPU::op_xor(){
     Operand tar = params[1];
     unsigned result = src.value ^ tar.value;
     store(tar, result);
-    setFlag("S0", 1, result == 0); // zero flag
+    setFlag(S0, 1, result == 0); // zero flag
 }
 
 void JalcoreCPU::op_cmp(){
@@ -417,8 +418,8 @@ void JalcoreCPU::op_cmp(){
     get_params(2, params);
     Operand src1 = params[0];
     Operand src2 = params[1];
-    setFlag("S0", 0, src1.value > src2.value); // carry flag
-    setFlag("S0", 1, src1.value == src2.value); // zero flag
+    setFlag(S0, 0, src1.value > src2.value); // carry flag
+    setFlag(S0, 1, src1.value == src2.value); // zero flag
 }
 
 void JalcoreCPU::op_push(){
@@ -460,8 +461,8 @@ void JalcoreCPU::op_jmp(){
     bool flip = BIT_CHECK(src.value, 7);
     BIT_SET(src.value, 7, 0);
     bool flagSet;
-    if (src.value <= 7) flagSet = getFlag("S0", src.value);
-    else flagSet = getFlag("S1", src.value-7);
+    if (src.value <= 7) flagSet = getFlag(S0, src.value);
+    else flagSet = getFlag(S1, src.value-7);
     flagSet ^= flip;
     if (flagSet) registers.PC = tar.target;
 }
@@ -476,8 +477,8 @@ void JalcoreCPU::op_jsr(){
     bool flip = BIT_CHECK(src.value, 7);
     BIT_SET(src.value, 7, 0);
     bool flagSet;
-    if (src.value <= 7) flagSet = getFlag("S0", src.value);
-    else flagSet = getFlag("S1", src.value-7);
+    if (src.value <= 7) flagSet = getFlag(S0, src.value);
+    else flagSet = getFlag(S1, src.value-7);
     flagSet ^= flip;
     if (flagSet){
         // push PC to stack before jumping
@@ -557,7 +558,7 @@ void JalcoreCPU::execute(){
         cycle_total += cycle_time.count();
 
         // halt check
-        if (getFlag("S0", 4)){
+        if (getFlag(S0, 4)){
             printf("Halted\n");
             //printf(memory.hex())
             bus->isRunning = false;
@@ -631,7 +632,6 @@ void JalcorePPU::SDL_eventloop(){
     memset(pixels, 0, WINDOW_WIDTH * WINDOW_WIDTH * sizeof(Uint32));
     
     while (bus->isRunning){
-        auto start = std::chrono::high_resolution_clock::now();
         while (SDL_PollEvent(&event)){
             if (event.type == SDL_QUIT) bus->isRunning = false;
         }
@@ -661,11 +661,11 @@ uint8_t Bus::read(uint16_t addr){
 
 void Bus::loadRom(FILE* rom){
     fseek(rom, 0, SEEK_END);
-    long size = ftell(rom);
+    unsigned long size = ftell(rom);
     fseek(rom, 0, SEEK_SET);
     if (size > ramSize){
         size = ramSize;
-        printf("Rom cut off from %d to %d", size, ramSize);
+        printf("Rom cut off from %ld to %lld", size, ramSize);
     }
     fread(ram, sizeof(uint8_t), size, rom);
 }
@@ -680,12 +680,12 @@ void Bus::Startup(){
 
 
     
-    printf("Display Redraws: %u\n", ppu.redraw_count);
+    printf("Display Redraws: %llu\n", ppu.redraw_count);
     printf("Time spent Drawing: %.3fs\n", ppu.redraw_total);
     printf("Average Display Update Time: %.3fms\n", (ppu.redraw_total/ppu.redraw_count)*1000);
     printf("Average Framerate: %.3f\n\n", ppu.redraw_count / exec_time.count());
     
-    printf("Cycles: %u\n", cpu.cycle_counter);
+    printf("Cycles: %llu\n", cpu.cycle_counter);
     printf("Time spent on cycles: %.3fs\n", cpu.cycle_total);
     printf("Average Cycle Time: %.3fns\n", (cpu.cycle_total/cpu.cycle_counter)*1000*1000*1000);
     printf("Instructions per second: %.3fmhz\n\n", (1 / (exec_time.count() / cpu.cycle_counter)) / 1000 / 1000);
