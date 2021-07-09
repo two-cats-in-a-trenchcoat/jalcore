@@ -680,7 +680,7 @@ void Bus::Startup(){
     std::thread cpu_thread(JalcoreCPU::execute, &cpu);
     ppu.SDL_eventloop();
     cpu_thread.join();
-    std::chrono::duration<double> exec_time = std::chrono::high_resolution_clock::now() - exec_start;
+    std::chrono::duration<int64_t, std::nano> exec_time = std::chrono::high_resolution_clock::now() - exec_start;
 
 
     
@@ -692,11 +692,11 @@ void Bus::Startup(){
     printf("Cycles: %llu\n", cpu.cycle_counter);
     printf("Time spent on cycles: %.3fs\n", cpu.cycle_total);
     printf("Average Cycle Time: %.3fns\n", (cpu.cycle_total/cpu.cycle_counter)*1000*1000*1000);
-    printf("Instructions per second: %.3fmhz\n\n", (1 / (exec_time.count() / cpu.cycle_counter)) / 1000 / 1000);
+    printf("Instructions per second: %.3fmhz\n\n", (1 / (cpu.cycle_total/cpu.cycle_counter)) / 1000 / 1000);
     
     
     
-    printf("Total execution time: %.3fs\n", exec_time.count());
+    printf("Total execution time: %.3fs\n", exec_time.count() / (double)1000000000);
 }
 
 
