@@ -80,6 +80,8 @@ public:
     JalcoreCPU();
     ~JalcoreCPU();
 
+    void reset();
+
     void ConnectBus(Bus *b);
     void write(uint16_t addr, uint8_t data);
     uint8_t read(uint16_t addr);
@@ -132,6 +134,8 @@ public:
     void op_ret();
     void op_rdw();
 
+    void runtime_loop();
+
     void execute();
 };
 
@@ -141,6 +145,7 @@ public:
     ~JalcorePPU();
 
     void ConnectBus(Bus* b);
+    void Prepare();
     void SDL_eventloop();
     std::chrono::duration<double> UpdateDisplay();
     void Redraw();
@@ -162,7 +167,8 @@ public:
 
 class Bus {
 public:
-    bool isRunning = false;
+    bool cpuRunning = false;
+    bool guiRunning = false;
     
     Bus();
     ~Bus();
@@ -175,6 +181,7 @@ public:
     void Startup();
 
     // Devices:
+    std::thread cpu_thread;
     JalcoreCPU cpu;
     JalcorePPU ppu;
     const static uint64_t ramSize = 0x10000;

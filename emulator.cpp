@@ -8,7 +8,14 @@
 #include <cmath>
 
 #define SDL_MAIN_HANDLED
+#include "imgui.h"
+#include "imgui_impl_sdl.h"
+#include "imgui_impl_opengl2.h"
+#include "imgui_stdlib.h"
+#include <stdio.h>
 #include <SDL2/SDL.h>
+#include <SDL2/SDL.h>
+#include <SDL2/SDL_opengl.h>
 #define SCALE 4
 #define WINDOW_WIDTH 128
 
@@ -46,6 +53,12 @@ const uint8_t MV = 0x13;
 JalcoreCPU::JalcoreCPU(){}
 
 JalcoreCPU::~JalcoreCPU(){}
+
+void JalcoreCPU::reset(){
+    registers = Registers {};
+    cycle_total = 0;
+    cycle_counter = 0;
+}
 
 void JalcoreCPU::ConnectBus(Bus *b){
     bus = b;
@@ -517,8 +530,14 @@ void JalcoreCPU::op_rdw(){
 
 // Execution loop
 
+void JalcoreCPU::runtime_loop(){
+    while (bus->guiRunning) {
+        execute();
+    }
+}
+
 void JalcoreCPU::execute(){
-    while (bus->isRunning){
+    while (bus->cpuRunning){
         auto cycle_start = std::chrono::high_resolution_clock::now();
         uint8_t opcode = read_byte();
         #ifdef DEBUG
@@ -552,7 +571,7 @@ void JalcoreCPU::execute(){
                 printf("Unexpected opcode %#x, PC: %d\n", opcode, registers.PC);
                 printf("SP: %d\n", registers.SP);
                 printf("IX: %d\n", registers.IX);
-                bus->isRunning = false;
+                bus->cpuRunning = false;
                 return;
         }
         auto cycle_end = std::chrono::high_resolution_clock::now();
@@ -564,7 +583,7 @@ void JalcoreCPU::execute(){
         if (getFlag(S0, 4)){
             printf("Halted\n");
             //printf(memory.hex())
-            bus->isRunning = false;
+            bus->cpuRunning = false;
         }
     }
 }
@@ -579,7 +598,7 @@ void JalcorePPU::ConnectBus(Bus *b){
 }
 
 std::chrono::duration<double> JalcorePPU::UpdateDisplay(){
-    //if (!bus->isRunning) return std::chrono::duration<double>{0};
+    //if (!bus->cpuRunning) return std::chrono::duration<double>{0};
     auto start = std::chrono::high_resolution_clock::now();
     const int startAddr = 0x0000;
     uint8_t value;
@@ -599,7 +618,10 @@ std::chrono::duration<double> JalcorePPU::UpdateDisplay(){
 
         }
     }
-    SDL_UpdateTexture(texture, NULL, pixels, WINDOW_WIDTH * sizeof(Uint32));
+    int res = SDL_UpdateTexture(texture, NULL, pixels, WINDOW_WIDTH * sizeof(Uint32));
+    if (res != 0){
+        printf("Texture Error: %d\n", res);
+    }
     SDL_RenderCopy(renderer, texture, NULL, NULL);
     SDL_RenderPresent(renderer);
     auto finish = std::chrono::high_resolution_clock::now();
@@ -625,26 +647,128 @@ void JalcorePPU::Redraw(){
     #endif
 }
 
-void JalcorePPU::SDL_eventloop(){
-    // initialise window
-    SDL_Init(SDL_INIT_VIDEO);
+void JalcorePPU::Prepare(){
+    // prepare main display window
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0){
+        printf("Error: %s\n", SDL_GetError());
+        bus->cpuRunning = false;
+        return;
+    }
     SDL_CreateWindowAndRenderer(WINDOW_WIDTH*SCALE, WINDOW_WIDTH*SCALE, 0, &window, &renderer);
+    SDL_SetWindowTitle(window, "Jalcore v0.1.0");
     SDL_RenderSetScale(renderer, SCALE, SCALE);
     texture = SDL_CreateTexture(
         renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, WINDOW_WIDTH, WINDOW_WIDTH
     );
     memset(pixels, 0, WINDOW_WIDTH * WINDOW_WIDTH * sizeof(Uint32));
+}
+
+void JalcorePPU::SDL_eventloop(){
+    // initialise ImGui window
     
-    while (bus->isRunning){
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+    
+    SDL_Window *im_window = SDL_CreateWindow("Controls", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 800, 600, window_flags);
+    
+    SDL_GLContext gl_context = SDL_GL_CreateContext(im_window);
+    SDL_GL_MakeCurrent(im_window, gl_context);
+
+    // Setup Dear ImGui context
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+
+    ImGuiIO &io = ImGui::GetIO(); (void)io;
+
+    // Setup Dear ImGui style
+    ImGui::StyleColorsDark();
+
+    // Setup Platform/Renderer backends
+    ImGui_ImplSDL2_InitForOpenGL(im_window, gl_context);
+    ImGui_ImplOpenGL2_Init();
+    
+    ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
+    static std::string rom_location;
+    while (bus->guiRunning){
         while (SDL_PollEvent(&event)){
-            if (event.type == SDL_QUIT) bus->isRunning = false;
+            ImGui_ImplSDL2_ProcessEvent(&event);
+            if (event.type == SDL_QUIT){
+                bus->guiRunning = false;
+            }
+            if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE){
+                bus->guiRunning = false;
+            }
         }
+
+        ImGui_ImplOpenGL2_NewFrame();
+        ImGui_ImplSDL2_NewFrame();
+        ImGui::NewFrame();
+        {
+            ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+            ImGui::Begin("Statistics", NULL, ImGuiWindowFlags_NoResize);
+
+            ImGui::Text("This panel displays realtime statistics for the CPU");
+            
+            ImGui::Text("CPU status: %s", bus->cpuRunning ? "Running" : "Halted");
+            ImGui::Text("Display Redraws: %llu\n", redraw_count);
+            ImGui::Text("Time spent Drawing: %.3fs\n", redraw_total);
+            ImGui::Text("Average Display Update Time: %.3fms\n", (redraw_total/redraw_count)*1000);
+            //ImGui::Text("Average Framerate: %.3f\n\n", redraw_count / (bus->exec_time.count() / (double)1000000000));
+            
+            ImGui::Text("Cycles: %llu\n", bus->cpu.cycle_counter);
+            ImGui::Text("Time spent on cycles: %.3fs\n", bus->cpu.cycle_total);
+            ImGui::Text("Average Cycle Time: %.3fns\n", (bus->cpu.cycle_total/bus->cpu.cycle_counter)*1000*1000*1000);
+            ImGui::Text("Instructions per second: %.3fmhz\n\n", (1 / (bus->cpu.cycle_total/bus->cpu.cycle_counter)) / 1000 / 1000);
+            
+            if (ImGui::Button("Toggle CPU Status")){
+                bus->cpuRunning = !bus->cpuRunning;
+            }
+
+            if (ImGui::Button("Reset CPU")){
+                bus->cpu.reset();
+            }
+
+            ImGui::InputText("ROM filepath", &rom_location, 0, (ImGuiInputTextCallback)__null, (void *)__null);
+            ImGui::SameLine();
+            if (ImGui::Button("Load ROM")){
+                FILE* file = fopen(rom_location.c_str(), "r+");
+                if (file == NULL) {
+                    printf("File is null");
+                }
+                else {
+                    bus->loadRom(file);
+                    fclose(file);
+                }
+            }
+
+            ImGui::Text("ImGUI average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
+            
+            ImGui::End();
+        }
+        
+        ImGui::Render();
+        glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
+        glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w, clear_color.w);
+        glClear(GL_COLOR_BUFFER_BIT);
+        //glUseProgram(0); // You may want this if using this code in an OpenGL 3+ context where shaders may be bound
+        ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
+        SDL_GL_SwapWindow(im_window);
     }
 
     // teardown work
+    ImGui_ImplOpenGL2_Shutdown();
+    ImGui_ImplSDL2_Shutdown();
+    ImGui::DestroyContext();
+    
+    SDL_GL_DeleteContext(gl_context);
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
+    SDL_DestroyWindow(im_window);
     SDL_Quit();
 }
 
@@ -675,10 +799,14 @@ void Bus::loadRom(FILE* rom){
 }
 
 void Bus::Startup(){
-    isRunning = true;
+    cpuRunning = true;
+    guiRunning = true;
     auto exec_start = std::chrono::high_resolution_clock::now();
-    std::thread cpu_thread(JalcoreCPU::execute, &cpu);
+    ppu.Prepare();
+    cpu_thread = std::thread(&JalcoreCPU::runtime_loop, &cpu);
     ppu.SDL_eventloop();
+    guiRunning = false;
+    cpuRunning = false;
     cpu_thread.join();
     std::chrono::duration<int64_t, std::nano> exec_time = std::chrono::high_resolution_clock::now() - exec_start;
 
