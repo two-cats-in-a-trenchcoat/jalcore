@@ -687,7 +687,7 @@ void Bus::Startup(){
     printf("Display Redraws: %llu\n", ppu.redraw_count);
     printf("Time spent Drawing: %.3fs\n", ppu.redraw_total);
     printf("Average Display Update Time: %.3fms\n", (ppu.redraw_total/ppu.redraw_count)*1000);
-    printf("Average Framerate: %.3f\n\n", ppu.redraw_count / exec_time.count());
+    printf("Average Framerate: %.3f\n\n", ppu.redraw_count / (exec_time.count() / (double)1000000000));
     
     printf("Cycles: %llu\n", cpu.cycle_counter);
     printf("Time spent on cycles: %.3fs\n", cpu.cycle_total);
