@@ -16,26 +16,19 @@ class CustomParser(GeneratedParser):
                 self.fail()
                 break
             parts.append(part)
-            # match:
-            p = parts[0]
-            return p
-        self.goto(pos)
-        
-        return None
-        
-    @memoize_left_rec
-    def block(self):
-        pos = self.mark()
-        parts = []
-        for _ in range(1):
             part = self._loop_0()
             if not self.match(part):
                 self.fail()
                 break
             parts.append(part)
+            part = self.expect('EOF')
+            if not self.match(part):
+                self.fail()
+                break
+            parts.append(part)
             # match:
-            stmts = parts[0]
-            return Block(stmts)
+            p = parts[0]
+            return p
         self.goto(pos)
         
         return None
@@ -44,7 +37,61 @@ class CustomParser(GeneratedParser):
         children = []
         while True:
             pos = self.mark()
+            part = self.expect('N')
+            if self.match(part): children.append(part)
+            else:
+                self.goto(pos)
+                break
+        return children
+    @memoize_left_rec
+    def block(self):
+        pos = self.mark()
+        parts = []
+        for _ in range(1):
+            part = self._loop_1()
+            if not self.match(part):
+                self.fail()
+                break
+            parts.append(part)
+            # match:
+            stmts = parts[0]
+            return Block([s[1] for s in stmts])
+        self.goto(pos)
+        
+        return None
+        
+    def _loop_1(self):
+        children = []
+        while True:
+            pos = self.mark()
+            part = self._expr_list_2()
+            if self.match(part): children.append(part)
+            else:
+                self.goto(pos)
+                break
+        return children
+    def _expr_list_2(self):
+        pos = self.mark()
+        parts = []
+        for _ in range(1):
+            part = self._loop_3()
+            if not self.match(part):
+                self.fail()
+                break
+            parts.append(part)
             part = self.statement()
+            if not self.match(part):
+                self.fail()
+                break
+            parts.append(part)
+            return parts
+        self.goto(pos)
+        return None
+    def _loop_3(self):
+        children = []
+        while True:
+            pos = self.mark()
+            part = self.expect('N')
             if self.match(part): children.append(part)
             else:
                 self.goto(pos)
@@ -67,7 +114,7 @@ class CustomParser(GeneratedParser):
             parts.append(part)
             # match:
             i = parts[0]
-            return JumpPoint(i.value)
+            return Label(i.value)
         self.goto(pos)
         
         parts = []
@@ -128,7 +175,17 @@ class CustomParser(GeneratedParser):
                 self.fail()
                 break
             parts.append(part)
+            part = self._loop_4()
+            if not self.match(part):
+                self.fail()
+                break
+            parts.append(part)
             part = self.block()
+            if not self.match(part):
+                self.fail()
+                break
+            parts.append(part)
+            part = self._loop_5()
             if not self.match(part):
                 self.fail()
                 break
@@ -141,18 +198,101 @@ class CustomParser(GeneratedParser):
             # match:
             name = parts[1]
             params = parts[2]
-            block = parts[4]
+            block = parts[5]
             return MacroDefinition(name.value, params, block)
+        self.goto(pos)
+        
+        parts = []
+        for _ in range(1):
+            part = self.expect('IF')
+            if not self.match(part):
+                self.fail()
+                break
+            parts.append(part)
+            part = self.factor()
+            if not self.match(part):
+                self.fail()
+                break
+            parts.append(part)
+            part = self.expect('COLON')
+            if not self.match(part):
+                self.fail()
+                break
+            parts.append(part)
+            part = self._loop_6()
+            if not self.match(part):
+                self.fail()
+                break
+            parts.append(part)
+            part = self.block()
+            if not self.match(part):
+                self.fail()
+                break
+            parts.append(part)
+            part = self._loop_7()
+            if not self.match(part):
+                self.fail()
+                break
+            parts.append(part)
+            part = self.expect('ENDIF')
+            if not self.match(part):
+                self.fail()
+                break
+            parts.append(part)
+            # match:
+            condition = parts[1]
+            block = parts[4]
+            return IfStatement(condition, block)
         self.goto(pos)
         
         return None
         
+    def _loop_4(self):
+        children = []
+        while True:
+            pos = self.mark()
+            part = self.expect('N')
+            if self.match(part): children.append(part)
+            else:
+                self.goto(pos)
+                break
+        return children
+    def _loop_5(self):
+        children = []
+        while True:
+            pos = self.mark()
+            part = self.expect('N')
+            if self.match(part): children.append(part)
+            else:
+                self.goto(pos)
+                break
+        return children
+    def _loop_6(self):
+        children = []
+        while True:
+            pos = self.mark()
+            part = self.expect('N')
+            if self.match(part): children.append(part)
+            else:
+                self.goto(pos)
+                break
+        return children
+    def _loop_7(self):
+        children = []
+        while True:
+            pos = self.mark()
+            part = self.expect('N')
+            if self.match(part): children.append(part)
+            else:
+                self.goto(pos)
+                break
+        return children
     @memoize
     def params(self):
         pos = self.mark()
         parts = []
         for _ in range(1):
-            part = self._maybe_1()
+            part = self._maybe_8()
             if not self.match(part):
                 self.fail()
                 break
@@ -164,13 +304,13 @@ class CustomParser(GeneratedParser):
         
         return None
         
-    def _maybe_1(self):
+    def _maybe_8(self):
         pos = self.mark()
-        part = self._expr_list_2()
+        part = self._expr_list_9()
         if self.match(part): return part
         self.goto(pos)
         return Filler()
-    def _expr_list_2(self):
+    def _expr_list_9(self):
         pos = self.mark()
         parts = []
         for _ in range(1):
@@ -179,7 +319,7 @@ class CustomParser(GeneratedParser):
                 self.fail()
                 break
             parts.append(part)
-            part = self._loop_3()
+            part = self._loop_10()
             if not self.match(part):
                 self.fail()
                 break
@@ -187,17 +327,17 @@ class CustomParser(GeneratedParser):
             return parts
         self.goto(pos)
         return None
-    def _loop_3(self):
+    def _loop_10(self):
         children = []
         while True:
             pos = self.mark()
-            part = self._expr_list_4()
+            part = self._expr_list_11()
             if self.match(part): children.append(part)
             else:
                 self.goto(pos)
                 break
         return children
-    def _expr_list_4(self):
+    def _expr_list_11(self):
         pos = self.mark()
         parts = []
         for _ in range(1):
@@ -254,7 +394,7 @@ class CustomParser(GeneratedParser):
                 break
             # match:
             i = parts[0]
-            return Register(i.value.lower()) if i.value.lower() in REGISTERS else JumpPointer(i.value)
+            return Register(i.value.lower()) if i.value.lower() in REGISTERS else LabelPointer(i.value)
         self.goto(pos)
         
         parts = []
@@ -264,7 +404,7 @@ class CustomParser(GeneratedParser):
                 self.fail()
                 break
             parts.append(part)
-            part = self._maybe_5()
+            part = self._maybe_12()
             if not self.match(part):
                 self.fail()
                 break
@@ -289,13 +429,13 @@ class CustomParser(GeneratedParser):
         
         return None
         
-    def _maybe_5(self):
+    def _maybe_12(self):
         pos = self.mark()
-        part = self._expr_list_6()
+        part = self._expr_list_13()
         if self.match(part): return part
         self.goto(pos)
         return Filler()
-    def _expr_list_6(self):
+    def _expr_list_13(self):
         pos = self.mark()
         parts = []
         for _ in range(1):
@@ -309,7 +449,7 @@ class CustomParser(GeneratedParser):
                 self.fail()
                 break
             parts.append(part)
-            part = self._loop_7()
+            part = self._loop_14()
             if not self.match(part):
                 self.fail()
                 break
@@ -322,17 +462,17 @@ class CustomParser(GeneratedParser):
             return parts
         self.goto(pos)
         return None
-    def _loop_7(self):
+    def _loop_14(self):
         children = []
         while True:
             pos = self.mark()
-            part = self._expr_list_8()
+            part = self._expr_list_15()
             if self.match(part): children.append(part)
             else:
                 self.goto(pos)
                 break
         return children
-    def _expr_list_8(self):
+    def _expr_list_15(self):
         pos = self.mark()
         parts = []
         for _ in range(1):
@@ -354,7 +494,7 @@ class CustomParser(GeneratedParser):
         pos = self.mark()
         parts = []
         for _ in range(1):
-            part = self._or_9()
+            part = self._or_16()
             if not self.match(part):
                 self.fail()
                 break
@@ -366,7 +506,7 @@ class CustomParser(GeneratedParser):
         
         return None
         
-    def _or_9(self):
+    def _or_16(self):
         pos = self.mark()
         part = self.expect('INT')
         if self.match(part): return part

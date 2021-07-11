@@ -1,18 +1,19 @@
-program  : p=block { p };
+program  : p=block N* EOF { p };
 
-block  :  stmts=statement* { Block(stmts) };
+block  :  stmts=(N* statement)* { Block([s[1] for s in stmts]) };
 
 statement
-    :  i=ID COLON { JumpPoint(i.value) };
+    :  i=ID COLON { Label(i.value) };
     :  opcode=INSTRUCTION params=params { Instruction(opcode.value, params) };
     :  name=ID params=params { MacroCall(name.value, params) };
-    :  MACRO name=ID params=params COLON block=block ENDMACRO { MacroDefinition(name.value, params, block) };
+    :  MACRO name=ID params=params COLON N* block=block N* ENDMACRO { MacroDefinition(name.value, params, block) };
+    :  IF condition=factor COLON N* block=block N* ENDIF { IfStatement(condition, block) };
 
 params  :  p=(factor (COMMA factor)*)? { process_params(p) };
 
 factor
     :  LS_PAREN i=factor RS_PAREN { Address(i) };
-    :  i=ID !COLON { Register(i.value.lower()) if i.value.lower() in REGISTERS else JumpPointer(i.value) };
+    :  i=ID !COLON { Register(i.value.lower()) if i.value.lower() in REGISTERS else LabelPointer(i.value) };
     :  i=MACRO_PARAM type_constraints=(LPAREN ID (COMMA ID)* RPAREN)? { construct_macro_param(i.value, type_constraints) };
     :  i=num { i };
 

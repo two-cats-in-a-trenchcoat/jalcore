@@ -20,6 +20,7 @@ def main():
 
 
     lexer_result = AsmLexer().lex_string(data)
+    #print(lexer_result.tokens)
     stream = TokenStream(lexer_result) # create token stream
     parser = AsmParser(stream)
     result = parser.program()

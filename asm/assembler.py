@@ -6,9 +6,11 @@ from copy import deepcopy
 
 class AsmLexer(Lexer):
 
-    @token(r"\n+")
-    def NEWLINE(self, t: Token):
-        self.lineno += len(t.value)
+    @token(r"\n")
+    def N(self, t: Token):
+        self.lineno += 1
+        self.column = 0
+        return t
     
     @token(r"[0-9]+")
     def INT(self, t: Token):
@@ -29,7 +31,10 @@ class AsmLexer(Lexer):
     ENDMACRO = r"ENDMACRO"
     MACRO_PARAM = r"\%[a-zA-Z_][a-zA-Z0-9_]*"
 
-    @token(r"[a-zA-Z_][a-zA-Z0-9_]*")
+    IF = r"IF"
+    ENDIF = r"ENDIF"
+
+    @token(r"[a-zA-Z_\.][a-zA-Z0-9_]*")
     def ID(self, t: Token):
         if t.value in INSTRUCTIONS:
             t.type = "INSTRUCTION"
@@ -61,8 +66,28 @@ class Assembler:
         self.ast = ast
         self.jump_pointer_addresses = {}
         self.second_pass_targets = {}
-        self.macros: List[MacroDefinition] = []
+        self.if_label_index = 0
+
+        self.macros: List[MacroDefinition] = [
+            # register builtin macros
+            BuiltinMacro(".data", [], None, self._macro_data),
+        ]
         self.result = bytearray(0)
+    
+    def _macro_data(self, call: MacroCall):
+        size_lookups = {
+            "u8": 1,
+            "u16": 2
+        }
+        # process first parameter for identifying how many bytes:
+        if isinstance(call.operands[0], LabelPointer):
+            size = size_lookups[call.operands[0].target]
+        else:
+            size = call.operands[0].value
+        target = call.operands[1].value & (2 ** (size * 8) - 1) # mask with max value
+        value = target.to_bytes(size, "little")
+        #print("PUSH: ", value)
+        self.push_lots(value)
     
     def push_byte(self, value):
         self.result.append(value)
@@ -77,7 +102,7 @@ class Assembler:
                 operand.type = MD
             else:
                 operand.type = MV
-        elif isinstance(operand, JumpPointer):
+        elif isinstance(operand, LabelPointer):
             operand.type = MD
         elif isinstance(operand, Number):
             if operand.value < 256:
@@ -102,7 +127,7 @@ class Assembler:
                 return operand.target.value.to_bytes(2, "little")
             else:
                 return bytes([MV, operand.target.type, *self.get_aop(operand.target)])
-        elif isinstance(operand, JumpPointer):
+        elif isinstance(operand, LabelPointer):
             self.second_pass_targets[len(self.result)] = operand.target
             return bytes(2) # This address is populated in Second Pass
         elif isinstance(operand, Number):
@@ -127,6 +152,8 @@ class Assembler:
         self.push_additional(instruction.operands)
     
     def macro_fits(self, macro: MacroDefinition, call: MacroCall):
+        if macro.name == call.opcode and isinstance(macro, BuiltinMacro):
+            return True
         if macro.name != call.opcode:
             return False
         if len(macro.params) != len(call.operands):
@@ -172,22 +199,52 @@ class Assembler:
         # match parameters and name with defined macros
         for macro in self.macros:
             if self.macro_fits(macro, call):
+                if isinstance(macro, BuiltinMacro):
+                    macro.action(call)
+                    return
                 self.populate_macro(macro, call)
                 return
         raise Exception(f"Failed to find matching macro for call {call}")
+    
+    def process_if_statement(self, part: IfStatement):
+        """
+        IF 0:
+            something
+        ENDIF
+        ; translated to:
+        
+        jmp 0 <if_label_0>
+        jmp 7 <if_label_1>
+        <if_label_0>:
+            something
+        <if_label_1>
+        """
+        execute_if = f"<if_label_{self.if_label_index}>"
+        self.if_label_index += 1
+        skip_if = f"<if_label_{self.if_label_index}>"
+        self.if_label_index += 1
+        self.process_instruction(Instruction("jmp", [part.condition, LabelPointer(execute_if)]))
+        self.process_instruction(Instruction("jmp", [Number(7), LabelPointer(skip_if)]))
+        self.jump_pointer_addresses[execute_if] = len(self.result)
+        self.process_block(part.block)
+        self.jump_pointer_addresses[skip_if] = len(self.result)
+
+
 
     def process_block(self, block: Block):
         for part in block.body:
             print(part)
             if isinstance(part, Instruction):
                 self.process_instruction(part)
-            elif isinstance(part, JumpPoint):
+            elif isinstance(part, Label):
                 # set memory address of the JumpPoint
                 self.jump_pointer_addresses[part.name] = len(self.result)
             elif isinstance(part, MacroDefinition):
                 self.macros.append(part)
             elif isinstance(part, MacroCall):
                 self.process_macro_call(part)
+            elif isinstance(part, IfStatement):
+                self.process_if_statement(part)
 
     def first_pass(self):
         self.process_block(self.ast)

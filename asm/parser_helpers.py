@@ -22,7 +22,7 @@ class Register(Operand):
     target: str
 
 @dataclass
-class JumpPointer(Operand):
+class LabelPointer(Operand):
     target: str
 
 @dataclass
@@ -37,7 +37,7 @@ class Block(AST):
     body: List[Statement]
 
 @dataclass
-class JumpPoint(Statement):
+class Label(Statement):
     name: str
 
 @dataclass
@@ -57,9 +57,18 @@ class MacroDefinition(Statement):
     block: Block
 
 @dataclass
+class BuiltinMacro(MacroDefinition):
+    action: Callable
+
+@dataclass
 class MacroCall(Statement):
     opcode: str
     operands: List[Operand]
+
+@dataclass
+class IfStatement(Statement):
+    condition: Operand
+    block: Block
 
 
 
