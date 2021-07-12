@@ -1,6 +1,6 @@
 # Jalcore1 Emulator makefile.
 CC=g++
-BFLAGS= -v -Wall -g 
+BFLAGS= -v -Wall -g -std=c++17
 CFLAGS= -O3 -lSDL2 -lSDL2main -lopengl32 -Iimgui -Limgui resources/emulator.res
 
 TARGET=jalcore1-0.1.0.exe

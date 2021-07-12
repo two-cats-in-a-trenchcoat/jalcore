@@ -7,6 +7,7 @@
 #include <thread>
 #include <cmath>
 #include <cstdint>
+#include <vector>
 #include <SDL2/SDL.h>
 #pragma once
 
@@ -14,6 +15,10 @@
 #define BIT_SET(target, n, value) (target = (target & ~(1ULL << n)) | (value << n))
 // check if nth bit of target is set
 #define BIT_CHECK(target, n) ((target >> n) & 1ULL)
+
+#define SCALE 4
+#define WINDOW_WIDTH 128
+#define FRAMERATE 60.0f
 
 std::string getHex(char c);
 std::string dumpMem(uint8_t *memory, unsigned size);
@@ -137,6 +142,10 @@ public:
     void runtime_loop();
 
     void execute();
+
+    std::vector<uint64_t> instruction_counts = std::vector<uint64_t>(0x16, 0);
+    std::vector<double> instruction_times = std::vector<double>(0x16, 0.0f);
+
 };
 
 class JalcorePPU {

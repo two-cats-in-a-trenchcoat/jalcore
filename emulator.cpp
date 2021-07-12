@@ -6,6 +6,7 @@
 #include <chrono>
 #include <thread>
 #include <cmath>
+#include <vector>
 
 #define SDL_MAIN_HANDLED
 #include "imgui.h"
@@ -16,8 +17,6 @@
 #include <SDL2/SDL.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
-#define SCALE 4
-#define WINDOW_WIDTH 128
 
 #include "emulator.h"
 
@@ -576,8 +575,10 @@ void JalcoreCPU::execute(){
         }
         auto cycle_end = std::chrono::high_resolution_clock::now();
         cycle_counter += 1;
+        instruction_counts[opcode] += 1;
         std::chrono::duration<double> cycle_time = cycle_end - cycle_start;
         cycle_total += cycle_time.count();
+        instruction_times[opcode] += cycle_time.count();
 
         // halt check
         if (getFlag(S0, 4)){
@@ -600,7 +601,6 @@ void JalcorePPU::ConnectBus(Bus *b){
 std::chrono::duration<double> JalcorePPU::UpdateDisplay(){
     //if (!bus->cpuRunning) return std::chrono::duration<double>{0};
     auto start = std::chrono::high_resolution_clock::now();
-    const int startAddr = 0x0000;
     uint8_t value;
     unsigned pos;
     uint8_t r, g, b;
@@ -608,7 +608,7 @@ std::chrono::duration<double> JalcorePPU::UpdateDisplay(){
     for (short y = 0; y < WINDOW_WIDTH; y++){
         for (short x = 0; x < WINDOW_WIDTH; x++){
             pos = ((128 * y) + x);
-            value = vram[startAddr + pos];
+            value = vram[pos];
             
             r = ((value >> 5) / 7.0) * 255;
             g = (((value >> 2) & 0b111) / 7.0) * 255;
@@ -696,9 +696,11 @@ void JalcorePPU::SDL_eventloop(){
         while (SDL_PollEvent(&event)){
             ImGui_ImplSDL2_ProcessEvent(&event);
             if (event.type == SDL_QUIT){
+                bus->cpuRunning = false;
                 bus->guiRunning = false;
             }
             if (event.type == SDL_WINDOWEVENT && event.window.event == SDL_WINDOWEVENT_CLOSE){
+                bus->cpuRunning = false;
                 bus->guiRunning = false;
             }
         }
@@ -708,7 +710,7 @@ void JalcorePPU::SDL_eventloop(){
         ImGui::NewFrame();
         {
             ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
-            ImGui::Begin("Statistics", NULL, ImGuiWindowFlags_NoResize);
+            ImGui::Begin("Statistics", NULL/*, ImGuiWindowFlags_NoResize*/);
 
             ImGui::Text("This panel displays realtime statistics for the CPU");
             
@@ -746,6 +748,14 @@ void JalcorePPU::SDL_eventloop(){
 
             ImGui::Text("ImGUI average %.3f ms/frame (%.1f FPS)", 1000.0f / ImGui::GetIO().Framerate, ImGui::GetIO().Framerate);
             
+            ImGui::Text("Instruction times:");
+            
+            for (size_t i = 0; i < bus->cpu.instruction_counts.size(); i++){
+                //printf("%lld ", i);
+                //printf("\n");
+                ImGui::Text("0x%llx  :  %.3fns", i, (bus->cpu.instruction_times[i] / bus->cpu.instruction_counts[i])*1000*1000*1000);
+            }
+            
             ImGui::End();
         }
         
@@ -756,6 +766,8 @@ void JalcorePPU::SDL_eventloop(){
         //glUseProgram(0); // You may want this if using this code in an OpenGL 3+ context where shaders may be bound
         ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
         SDL_GL_SwapWindow(im_window);
+
+        SDL_Delay(floor(abs((1000/FRAMERATE) - io.DeltaTime)));
     }
 
     // teardown work
