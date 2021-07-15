@@ -89,6 +89,15 @@ unsigned JalcoreCPU::read_number(unsigned numBytes){
     return result;
 }
 
+unsigned JalcoreCPU::read_number(uint16_t address, unsigned numBytes){
+    unsigned result = 0;
+    for (int i = numBytes - 1; i >= 0; i--){
+        result <<= 8;
+        result += read(address + i);
+    }
+    return result;
+}
+
 bool JalcoreCPU::is_2byte_register(uint8_t type){
     return (type >= 0x0A && type <= 0x0E) or type == 0x14;
 }
@@ -302,21 +311,20 @@ void JalcoreCPU::op_subb(){
 }
 
 void JalcoreCPU::op_rol(){
-    // rol <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
+    // rol <tar>(8R, Mx) <tar-aop>
     // (rotate left)
-    Operand params[2];
-    get_params(2, params);
-    Operand src = params[0];
-    Operand tar = params[1];
-    unsigned result = src.value;
+    Operand params[1];
+    get_params(1, params);
+    Operand tar = params[0];
+    unsigned result = tar.value;
     bool carry;
-    if (src.type == "CV8"){
-        carry = result >> 7;
-        result  = (result << 1) | carry;
+    if (tar.type == "reg" && is_2byte_register(tar.target)){
+        carry = result >> 15;
+        result = (result << 1) | carry;
     }
     else {
-        carry = result >> 15;
-        result  = (result << 1) | carry;
+        carry = result >> 7;
+        result = (result << 1) | carry;
     }
     store(tar, result);
     setFlag(S0, 1, result == 0); // zero flag
@@ -324,22 +332,21 @@ void JalcoreCPU::op_rol(){
 }
 
 void JalcoreCPU::op_rolc(){
-    // rolc <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
+    // rolc <tar>(8R, Mx) <tar-aop>
     // (rotate left through carry)
-    Operand params[2];
-    get_params(2, params);
-    Operand src = params[0];
-    Operand tar = params[1];
-    unsigned result = src.value;
+    Operand params[1];
+    get_params(1, params);
+    Operand tar = params[0];
+    unsigned result = tar.value;
     bool oldcarry = getFlag(S0, 1);
     bool carry;
-    if (src.type == "CV8"){
-        carry = result >> 7;
-        result  = (result << 1) | oldcarry;
+    if (tar.type == "reg" && is_2byte_register(tar.target)){
+        carry = result >> 15;
+        result = (result << 1) | oldcarry;
     }
     else {
-        carry = result >> 15;
-        result  = (result << 1) | oldcarry;
+        carry = result >> 7;
+        result = (result << 1) | oldcarry;
     }
     store(tar, result);
     setFlag(S0, 1, result == 0); // zero flag
@@ -347,21 +354,20 @@ void JalcoreCPU::op_rolc(){
 }
 
 void JalcoreCPU::op_ror(){
-    // ror <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
+    // ror <tar>(8R, Mx) <tar-aop>
     // (rotate right)
-    Operand params[2];
-    get_params(2, params);
-    Operand src = params[0];
-    Operand tar = params[1];
-    unsigned result = src.value;
+    Operand params[1];
+    get_params(1, params);
+    Operand tar = params[0];
+    unsigned result = tar.value;
     bool carry;
-    if (src.type == "CV8"){
+    if (tar.type == "reg" && is_2byte_register(tar.target)){
         carry = result & 1;
-        result  = (result >> 1) | (carry << 7);
+        result = (result >> 1) | (carry << 15);
     }
     else {
         carry = result & 1;
-        result  = (result >> 1) | (carry << 15);
+        result = (result >> 1) | (carry << 7);
     }
     store(tar, result);
     setFlag(S0, 1, result == 0); // zero flag
@@ -371,20 +377,20 @@ void JalcoreCPU::op_ror(){
 void JalcoreCPU::op_rorc(){
     // rorc <src>(CV, 8R, Mx) <tar>(8R, Mx) <src-aop> <tar-aop>
     // (rotate right through carry)
-    Operand params[2];
-    get_params(2, params);
-    Operand src = params[0];
-    Operand tar = params[1];
-    unsigned result = src.value;
+    Operand params[1];
+    get_params(1, params);
+    Operand tar = params[0];
+    unsigned result = tar.value;
     bool oldcarry = getFlag(S0, 1);
     bool carry;
-    if (src.type == "CV8"){
+    if (tar.type == "reg" && is_2byte_register(tar.target)){
         carry = result & 1;
-        result  = (result << 1) | (oldcarry << 7);
+        result  = (result << 1) | (oldcarry << 15);
     }
     else {
         carry = result & 1;
-        result  = (result << 1) | (oldcarry << 15);
+        result  = (result << 1) | (oldcarry << 7);
+
     }
     store(tar, result);
     setFlag(S0, 1, result == 0); // zero flag
@@ -527,10 +533,26 @@ void JalcoreCPU::op_rdw(){
     bus->ppu.Redraw();
 }
 
+void JalcoreCPU::interrupt(){
+    if (!getFlag(S0, 5)) return;
+    uint16_t jump_address = read_number(interrupt_address, 2);
+    #ifdef DEBUG
+    printf("Interrupt triggerd, jumping to [%x].\n", jump_address);
+    #endif
+    // push PC to stack
+    registers.SP++;
+    write(registers.SP, registers.PC);
+    registers.SP++;
+    write(registers.SP, registers.PC >> 8);
+    
+    // load Interrupt address vector into PC
+    registers.PC = jump_address;
+}
+
 // Execution loop
 
 void JalcoreCPU::runtime_loop(){
-    while (bus->guiRunning) {
+    while (bus->guiRunning){
         execute();
     }
 }
@@ -540,7 +562,7 @@ void JalcoreCPU::execute(){
         auto cycle_start = std::chrono::high_resolution_clock::now();
         uint8_t opcode = read_byte();
         #ifdef DEBUG
-        printf("Opcode: %s\n", getHex(opcode).c_str());
+        printf("Opcode: %s (PC: %d)\n", getHex(opcode).c_str(), registers.PC);
         #endif
         switch (opcode){
             case 0x00: op_inc(); break;
@@ -573,6 +595,11 @@ void JalcoreCPU::execute(){
                 bus->cpuRunning = false;
                 return;
         }
+        if (interrupt_queued){
+            interrupt_queued = false;
+            interrupt();
+        }
+
         auto cycle_end = std::chrono::high_resolution_clock::now();
         cycle_counter += 1;
         instruction_counts[opcode] += 1;
@@ -703,13 +730,15 @@ void JalcorePPU::SDL_eventloop(){
                 bus->cpuRunning = false;
                 bus->guiRunning = false;
             }
+            if (event.type == SDL_KEYDOWN || event.type == SDL_KEYUP){
+                bus->keyboard.handle_keypress(event.key);
+            }
         }
 
         ImGui_ImplOpenGL2_NewFrame();
         ImGui_ImplSDL2_NewFrame();
         ImGui::NewFrame();
         {
-            ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
             ImGui::Begin("Statistics", NULL/*, ImGuiWindowFlags_NoResize*/);
 
             ImGui::Text("This panel displays realtime statistics for the CPU");
@@ -736,7 +765,7 @@ void JalcorePPU::SDL_eventloop(){
             ImGui::InputText("ROM filepath", &rom_location, 0, (ImGuiInputTextCallback)__null, (void *)__null);
             ImGui::SameLine();
             if (ImGui::Button("Load ROM")){
-                FILE* file = fopen(rom_location.c_str(), "r+");
+                FILE* file = fopen(rom_location.c_str(), "rb");
                 if (file == NULL) {
                     printf("File is null");
                 }
@@ -783,9 +812,35 @@ void JalcorePPU::SDL_eventloop(){
     SDL_Quit();
 }
 
+Keyboard::Keyboard(){}
+
+Keyboard::~Keyboard(){}
+
+void Keyboard::ConnectBus(Bus *b){
+    bus = b;
+}
+
+void Keyboard::handle_keypress(SDL_KeyboardEvent &event){
+    if (!bus->cpu.getFlag(S0, 5)) return;
+    if (event.type == SDL_KEYDOWN){
+        if (keys_pressed.count(event.keysym.scancode) > 0) return;
+        keys_pressed.insert(event.keysym.scancode);
+        bus->write(keycode_type_address, 0);
+    }
+    else {
+        keys_pressed.erase(event.keysym.scancode);
+        bus->write(keycode_type_address, 1);
+    }
+    
+    bus->write(keycode_address, event.keysym.scancode);
+    bus->write(bus->cpu.interrupt_type_address, interrupt_type);
+    bus->cpu.interrupt_queued = true;
+}
+
 Bus::Bus(){
     cpu.ConnectBus(this);
     ppu.ConnectBus(this);
+    keyboard.ConnectBus(this);
 }
 
 Bus::~Bus(){}
@@ -807,6 +862,10 @@ void Bus::loadRom(FILE* rom){
         printf("Rom cut off from %ld to %lld", size, ramSize);
     }
     fread(ram, sizeof(uint8_t), size, rom);
+    #ifdef DEBUG
+    std::cout << "Rom size: " << size << std::endl;
+    std::cout << "First 256 bytes: " << dumpMem(ram, 256) << "\n";
+    #endif
 }
 
 void Bus::Startup(){
@@ -842,7 +901,7 @@ void Bus::Startup(){
 int main(int argc, char* argv[]){
     Bus bus;
     if (argc >= 2){
-        FILE* file = fopen(argv[1], "r+");
+        FILE* file = fopen(argv[1], "rb");
         if (file == NULL) {
             printf("File is null");
             return 1;

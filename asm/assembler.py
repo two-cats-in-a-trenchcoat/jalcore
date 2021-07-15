@@ -71,6 +71,7 @@ class Assembler:
         self.macros: List[MacroDefinition] = [
             # register builtin macros
             BuiltinMacro(".data", [], None, self._macro_data),
+            BuiltinMacro(".align", [], None, self._macro_align),
         ]
         self.result = bytearray(0)
     
@@ -88,6 +89,11 @@ class Assembler:
         value = target.to_bytes(size, "little")
         #print("PUSH: ", value)
         self.push_lots(value)
+    
+    def _macro_align(self, call: MacroCall):
+        address = call.operands[0].value # has to be a number at the moment
+        amount = address - len(self.result)
+        self.push_lots(bytearray(amount))
     
     def push_byte(self, value):
         self.result.append(value)
@@ -256,6 +262,8 @@ class Assembler:
     def assemble(self):
         self.first_pass()
         self.second_pass()
+        #print(self.jump_pointer_addresses)
+        #print(self.second_pass_targets)
         return self.result
 
 def assemble(ast: Block):

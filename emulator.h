@@ -8,6 +8,7 @@
 #include <cmath>
 #include <cstdint>
 #include <vector>
+#include <set>
 #include <SDL2/SDL.h>
 #pragma once
 
@@ -44,7 +45,7 @@ struct Registers {
         Flags in S0 (MSB to LSB)
         1   Hardwired 1
         0	Hardwired 0
-        -	
+        I   Interrupt Enable Flag	
         H	Halt
         -	
         N	Negative *not implemented
@@ -73,6 +74,11 @@ enum FlagRegister {
     S1
 };
 
+enum InterruptType {
+    ANY,
+    KEYBOARD
+};
+
 class Bus;
 
 class JalcoreCPU {
@@ -97,6 +103,7 @@ public:
     unsigned offset_address(uint8_t type, unsigned address);
 
     unsigned read_number(unsigned numBytes);
+    unsigned read_number(uint16_t address, unsigned numBytes);
 
     bool is_2byte_register(uint8_t type);
 
@@ -139,13 +146,17 @@ public:
     void op_ret();
     void op_rdw();
 
+    void interrupt();
+
     void runtime_loop();
 
     void execute();
 
     std::vector<uint64_t> instruction_counts = std::vector<uint64_t>(0x16, 0);
     std::vector<double> instruction_times = std::vector<double>(0x16, 0.0f);
-
+    uint16_t interrupt_address = 0x9FFE;
+    uint16_t interrupt_type_address = 0x9FFD;
+    bool interrupt_queued = false;
 };
 
 class JalcorePPU {
@@ -174,6 +185,21 @@ public:
 
 };
 
+class Keyboard {
+    // this is an IO device which handles interrupts for keyboard inputs
+public:
+    Keyboard();
+    ~Keyboard();
+    void ConnectBus(Bus *b);
+    void handle_keypress(SDL_KeyboardEvent &event);
+
+    Bus *bus;
+    InterruptType interrupt_type = KEYBOARD;
+    uint16_t keycode_type_address = 0x9FFB;
+    uint16_t keycode_address = 0x9FFC;
+    std::set<uint8_t> keys_pressed;
+};
+
 class Bus {
 public:
     bool cpuRunning = false;
@@ -193,6 +219,7 @@ public:
     std::thread cpu_thread;
     JalcoreCPU cpu;
     JalcorePPU ppu;
+    Keyboard keyboard;
     const static uint64_t ramSize = 0x10000;
     uint8_t ram[ramSize] = {};
     
