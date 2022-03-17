@@ -25,6 +25,7 @@ standalone-release: $(SRC)
 	
 
 compatest: $(SRC2)
+	$ tar -xf libs.zip
 	$(CC) $(SRC2) -o $(TARGET2) $(CFLAGS)
 	@echo Compatablity test compiled successfully.
 	
