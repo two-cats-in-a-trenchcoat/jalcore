@@ -1,5 +1,5 @@
 # Jalcore simulated 8-bit CPU
-A fully-fledged, 8-bit, ~7MHz CPU Running in C++. Also, free bloatware.
+A fully-fledged, 8-bit, ~7MHz equivalent CPU Running in C++. Also, free bloatware.
 
 # Build Instructions (on Windows with g++)
 1. Install [SDL2](https://wiki.libsdl.org/Installation)
